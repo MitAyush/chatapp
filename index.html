@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>Character Chat</title>
+
+    <link rel="stylesheet" href="style.css" />
+  </head>
+
+  <body>
+    <div class="sidebar">
+      <h2>Character</h2>
+
+      <label for="characterName">Character Name</label>
+      <input id="characterName" type="text" value="Alice" />
+
+      <label for="characterPrompt">Character Prompt</label>
+      <textarea id="characterPrompt" rows="12">
+You are a intelligent character.
+
+Speaking style:
+- Natural conversational language
+- Short to medium responses
+- Occasionally uses humor
+
+Stay in character.
+Never mention that you are an AI.
+Respond as the character.</textarea
+      >
+      <label for="behaviorPrompt"> AI Behavior / Instructions </label>
+
+      <textarea
+        id="behaviorPrompt"
+        rows="8"
+        placeholder="Tell the AI how it should behave...
+    
+    Examples:
+    - Be more sarcastic.
+    - Keep responses short.
+    - Be emotionally expressive.
+    - Don't agree with everything I say.
+    - Speak more casually."
+      ></textarea>
+
+      <label for="model">Model</label>
+      <input id="model" type="text" value="openrouter/free" />
+
+      <label for="temperature">Temperature</label>
+      <input
+        id="temperature"
+        type="number"
+        value="0.7"
+        min="0"
+        max="2"
+        step="0.1"
+      />
+      <label for="memoryPrompt"> Important Memory </label>
+
+      <textarea
+        id="memoryPrompt"
+        rows="7"
+        placeholder="Important facts the AI should always remember..."
+      ></textarea>
+
+      <label for="contextBudget"> Context Budget </label>
+
+      <input
+        id="contextBudget"
+        type="number"
+        value="5000"
+        min="1000"
+        max="5000"
+        step="500"
+      />
+      <label for="automaticMemory"> Automatic Memory </label>
+
+      <textarea
+        id="automaticMemory"
+        rows="7"
+        readonly
+        placeholder="Automatically extracted memories will appear here..."
+      ></textarea>
+
+      <label for="maxTokens">Max output tokens</label>
+      <input id="maxTokens" type="number" value="1000" min="1" />
+      <div class="save-chat">
+        <label for="chatName">Chat Name</label>
+
+        <input id="chatName" type="text" placeholder="Enter chat name..." />
+
+        <button id="saveChat" class="save-button">Save Chat</button>
+        <div class="load-chat">
+          <label for="savedChats">Saved Chats</label>
+
+          <select id="savedChats">
+            <option value="">Select a chat...</option>
+          </select>
+
+          <button id="loadChat" class="load-button">Load Chat</button>
+        </div>
+
+        <button id="clearChat" class="clear-button">Clear Chat</button>
+      </div>
+      <button id="clearChat" class="clear-button">Clear Chat</button>
+
+      <div class="debug">
+        <h3>Prompt Inspector</h3>
+        <pre id="debug"></pre>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="header">
+        <strong id="title">Alice</strong>
+        <span>OpenRouter</span>
+      </div>
+
+      <div id="messages" class="messages"></div>
+
+      <div class="input-area">
+        <textarea id="input" placeholder="Type a message..."></textarea>
+
+        <button id="send" class="send">Send</button>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

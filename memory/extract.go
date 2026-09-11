@@ -28,7 +28,7 @@ func ExtractMemories(
 	)
 
 	requestBody := map[string]any{
-		"model": "openrouter/free",
+		"model": "nousresearch/hermes-3-llama-3.1-70b",
 
 		"messages": []models.Message{
 			{

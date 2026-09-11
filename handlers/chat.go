@@ -17,33 +17,25 @@ import (
 const openRouterURL = "https://openrouter.ai/api/v1/chat/completions"
 
 func ChatHandler(apiKey string) http.HandlerFunc {
-
 	return func(w http.ResponseWriter, r *http.Request) {
 
 		if r.Method != http.MethodPost {
-
 			http.Error(
 				w,
 				"method not allowed",
 				http.StatusMethodNotAllowed,
 			)
-
 			return
 		}
 
 		var req models.ChatRequest
 
-		if err :=
-			json.NewDecoder(
-				r.Body,
-			).Decode(&req); err != nil {
-
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(
 				w,
 				"invalid JSON",
 				http.StatusBadRequest,
 			)
-
 			return
 		}
 
@@ -52,7 +44,7 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 		// -----------------------------------------
 
 		if req.Model == "" {
-			req.Model = "openrouter/free"
+			req.Model = "nousresearch/hermes-3-llama-3.1-70b"
 		}
 
 		if req.Temperature == 0 {
@@ -71,25 +63,13 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 		// Build context
 		// -----------------------------------------
 
-		contextResult :=
-			context_v1.BuildContextV3(req)
-
-		messages :=
-			contextResult.Messages
+		messages := context_v1.BuildContextV3(req)
 
 		log.Printf(
-			"context: character=%d behavior=%d memory=%d summary=%d history=%d current=%d total=%d budget=%d remaining=%d included=%d dropped=%d",
-			contextResult.Stats.CharacterTokens,
-			contextResult.Stats.BehaviorTokens,
-			contextResult.Stats.MemoryTokens,
-			contextResult.Stats.SummaryTokens,
-			contextResult.Stats.HistoryTokens,
-			contextResult.Stats.CurrentMessageTokens,
-			contextResult.Stats.TotalTokens,
-			contextResult.Stats.Budget,
-			contextResult.Stats.RemainingTokens,
-			contextResult.Stats.IncludedMessages,
-			contextResult.Stats.DroppedMessages,
+			"context: messages=%d budget=%d max_output=%d",
+			len(messages),
+			req.ContextBudget,
+			req.MaxTokens,
 		)
 
 		// -----------------------------------------
@@ -97,46 +77,35 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 		// -----------------------------------------
 
 		openRouterReq := map[string]any{
-			"model": req.Model,
-
-			"messages": messages,
-
+			"model":       req.Model,
+			"messages":    messages,
 			"temperature": req.Temperature,
-
-			"max_tokens": req.MaxTokens,
-
-			"stream": true,
+			"max_tokens":  req.MaxTokens,
+			"stream":      true,
 		}
 
-		body, err :=
-			json.Marshal(openRouterReq)
-
+		body, err := json.Marshal(openRouterReq)
 		if err != nil {
-
 			http.Error(
 				w,
 				"failed to encode request",
 				http.StatusInternalServerError,
 			)
-
 			return
 		}
 
-		httpReq, err :=
-			http.NewRequest(
-				http.MethodPost,
-				openRouterURL,
-				bytes.NewReader(body),
-			)
+		httpReq, err := http.NewRequest(
+			http.MethodPost,
+			openRouterURL,
+			bytes.NewReader(body),
+		)
 
 		if err != nil {
-
 			http.Error(
 				w,
 				"failed to create request",
 				http.StatusInternalServerError,
 			)
-
 			return
 		}
 
@@ -168,11 +137,9 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 		// OpenRouter request
 		// -----------------------------------------
 
-		resp, err :=
-			http.DefaultClient.Do(httpReq)
+		resp, err := http.DefaultClient.Do(httpReq)
 
 		if err != nil {
-
 			log.Printf(
 				"OpenRouter connection error: %v",
 				err,
@@ -196,8 +163,7 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 		// OpenRouter error
 		// -----------------------------------------
 
-		if resp.StatusCode < 200 ||
-			resp.StatusCode >= 300 {
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 
 			var errorResponse struct {
 				Error struct {
@@ -206,10 +172,9 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 				} `json:"error"`
 			}
 
-			if err :=
-				json.NewDecoder(
-					resp.Body,
-				).Decode(&errorResponse); err == nil {
+			if err := json.NewDecoder(
+				resp.Body,
+			).Decode(&errorResponse); err == nil {
 
 				if errorResponse.Error.Message != "" {
 
@@ -261,17 +226,14 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 			"keep-alive",
 		)
 
-		flusher, ok :=
-			w.(http.Flusher)
+		flusher, ok := w.(http.Flusher)
 
 		if !ok {
-
 			http.Error(
 				w,
 				"streaming not supported",
 				http.StatusInternalServerError,
 			)
-
 			return
 		}
 
@@ -287,12 +249,8 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 
 		var assistantContent strings.Builder
 
-		scanner :=
-			bufio.NewScanner(
-				resp.Body,
-			)
+		scanner := bufio.NewScanner(resp.Body)
 
-		// Increase scanner limit.
 		scanner.Buffer(
 			make([]byte, 4096),
 			1024*1024,
@@ -300,21 +258,16 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 
 		for scanner.Scan() {
 
-			line :=
-				scanner.Text()
+			line := scanner.Text()
 
-			if !strings.HasPrefix(
-				line,
-				"data: ",
-			) {
+			if !strings.HasPrefix(line, "data: ") {
 				continue
 			}
 
-			data :=
-				strings.TrimPrefix(
-					line,
-					"data: ",
-				)
+			data := strings.TrimPrefix(
+				line,
+				"data: ",
+			)
 
 			// -------------------------------------
 			// Done
@@ -344,12 +297,10 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 				} `json:"choices"`
 			}
 
-			if err :=
-				json.Unmarshal(
-					[]byte(data),
-					&chunk,
-				); err != nil {
-
+			if err := json.Unmarshal(
+				[]byte(data),
+				&chunk,
+			); err != nil {
 				continue
 			}
 
@@ -357,17 +308,13 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 				continue
 			}
 
-			content :=
-				chunk.Choices[0].
-					Delta.Content
+			content := chunk.Choices[0].Delta.Content
 
 			if content == "" {
 				continue
 			}
 
-			assistantContent.WriteString(
-				content,
-			)
+			assistantContent.WriteString(content)
 
 			// -------------------------------------
 			// Send plain text SSE to browser
@@ -396,44 +343,44 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 		// Complete assistant response
 		// -----------------------------------------
 
-		// -----------------------------------------
-		// Stream finished
-		// -----------------------------------------
-
-		assistantText :=
-			strings.TrimSpace(
-				assistantContent.String(),
-			)
+		assistantText := strings.TrimSpace(
+			assistantContent.String(),
+		)
 
 		if assistantText == "" {
+			log.Println("nothing for assistant text")
 			return
 		}
 
 		// -----------------------------------------
 		// Full conversation
+		//
+		// IMPORTANT:
+		// This is the original conversation, not the
+		// compressed context sent to OpenRouter.
+		//
+		// The summary system needs the real messages
+		// so it can progressively compress old history.
 		// -----------------------------------------
 
-		conversation :=
-			make(
-				[]models.Message,
-				0,
-				len(req.Messages)+1,
-			)
+		conversation := make(
+			[]models.Message,
+			0,
+			len(req.Messages)+1,
+		)
 
-		conversation =
-			append(
-				conversation,
-				req.Messages...,
-			)
+		conversation = append(
+			conversation,
+			req.Messages...,
+		)
 
-		conversation =
-			append(
-				conversation,
-				models.Message{
-					Role:    "assistant",
-					Content: assistantText,
-				},
-			)
+		conversation = append(
+			conversation,
+			models.Message{
+				Role:    "assistant",
+				Content: assistantText,
+			},
+		)
 
 		// -----------------------------------------
 		// Automatic memory
@@ -448,20 +395,10 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 		// Rolling summary
 		// -----------------------------------------
 
-		if err :=
-			UpdateRollingSummary(
-				apiKey,
-				conversation,
-			); err != nil {
-
-			// IMPORTANT:
-			// The chat already succeeded.
-			// Do not return 502 here.
-			log.Printf(
-				"rolling summary error: %v",
-				err,
-			)
-		}
+		UpdateRollingSummary(
+			apiKey,
+			conversation,
+		)
 	}
 }
 
@@ -474,34 +411,28 @@ func maybeExtractMemories(
 	messages []models.Message,
 ) {
 
-	count :=
-		Memory.IncrementRequestCount()
+	count := Memory.IncrementRequestCount()
 
 	if count < Memory.MemoryExtractionInterval {
 		return
 	}
 
-	extractionMessages :=
-		Memory.GetMessagesForExtraction(
-			messages,
-		)
+	extractionMessages := Memory.GetMessagesForExtraction(
+		messages,
+	)
 
 	if len(extractionMessages) == 0 {
-
-		Memory.ResetRequestCount()
-
+		log.Println("memory extraction: no new messages to extract")
 		return
 	}
 
-	state :=
-		Memory.GetConversationState()
+	state := Memory.GetConversationState()
 
-	newMemories, err :=
-		Memory.ExtractMemories(
-			apiKey,
-			extractionMessages,
-			state.Memories,
-		)
+	newMemories, err := Memory.ExtractMemories(
+		apiKey,
+		extractionMessages,
+		state.Memories,
+	)
 
 	if err != nil {
 

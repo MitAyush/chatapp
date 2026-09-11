@@ -8,8 +8,8 @@ RUN go mod download
 COPY . .
 
 # DEBUG: show exactly what Docker received
-RUN echo "===== /app contents =====" && \
-    find /app -maxdepth 3 -type f -print
+# RUN echo "===== /app contents =====" && \
+    #find /app -maxdepth 3 -type f -print
 
 RUN echo "===== go.mod =====" && \
     cat /app/go.mod
@@ -31,8 +31,7 @@ COPY --from=builder /app/chatapp .
 COPY --from=builder /app/index.html .
 COPY --from=builder /app/app.js .
 COPY --from=builder /app/style.css .
-
-VOLUME ["/data"]
+COPY --from=builder /app/chats.db .
 
 EXPOSE 8080
 

@@ -4,40 +4,40 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
-	Memory "github.com/MitAyush/chatapp/memory"
+	"github.com/MitAyush/chatapp/memory"
 	"github.com/MitAyush/chatapp/models"
 )
 
 const (
-	// Summarize after this many NEW unsummarized tokens.
+	// Start summarizing when the unsummarized portion becomes substantial.
 	SummaryTriggerTokens = 2000
 
-	// Keep newest messages outside the summary.
+	// Keep this much recent conversation verbatim.
 	SummaryRecentTokens = 1500
 
-	// Desired summary size.
+	// Keep the rolling summary itself compact.
 	SummaryMaxTokens = 700
 )
 
-const summaryOpenRouterURL = "https://openrouter.ai/api/v1/chat/completions"
-
-type SummaryResult struct {
-	Summary string `json:"summary"`
+type summaryRequest struct {
+	Model    string           `json:"model"`
+	Messages []models.Message `json:"messages"`
 }
 
-func UpdateRollingSummary(
-	apiKey string,
-	messages []models.Message,
-) error {
+type summaryResponse struct {
+	Choices []struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	} `json:"choices"`
+}
 
-	if len(messages) == 0 {
-		return nil
-	}
-
-	state := Memory.GetConversationState()
+func UpdateRollingSummary(apiKey string, messages []models.Message) {
+	state := memory.GetConversationState()
 
 	start := state.LastSummarizedMessage
 
@@ -46,112 +46,63 @@ func UpdateRollingSummary(
 	}
 
 	if start >= len(messages) {
-		return nil
+		return
 	}
 
 	unsummarized := messages[start:]
 
-	totalTokens :=
-		EstimateSummaryMessagesTokens(
-			unsummarized,
-		)
+	unsummarizedTokens := countMessageTokens(unsummarized)
 
-	// Not enough new conversation yet.
-	if totalTokens < SummaryTriggerTokens {
-		return nil
+	if unsummarizedTokens < SummaryTriggerTokens {
+		return
 	}
 
-	// -----------------------------------------
-	// OLD → SUMMARY
-	// RECENT → REMAIN VERBATIM
-	// -----------------------------------------
+	// Find how many newest tokens we want to preserve verbatim.
+	remainingStart := len(unsummarized)
+	recentTokens := 0
 
-	summaryMessages, remainingStart :=
-		splitMessagesForSummary(
-			unsummarized,
-			SummaryRecentTokens,
-		)
+	for i := len(unsummarized) - 1; i >= 0; i-- {
+		tokens := estimateTokens(unsummarized[i].Content)
 
-	if len(summaryMessages) == 0 {
-		return nil
-	}
-
-	// -----------------------------------------
-	// Generate updated summary
-	// -----------------------------------------
-
-	newSummary, err :=
-		generateRollingSummary(
-			apiKey,
-			state.Summary,
-			summaryMessages,
-		)
-
-	if err != nil {
-		return err
-	}
-
-	// -----------------------------------------
-	// Save
-	// -----------------------------------------
-
-	Memory.SetSummary(
-		newSummary,
-	)
-
-	// -----------------------------------------
-	// Advance cursor
-	// -----------------------------------------
-
-	Memory.MarkMessagesSummarized(
-		start + remainingStart,
-	)
-
-	return nil
-}
-
-// -----------------------------------------
-// SPLIT OLD / RECENT
-// -----------------------------------------
-
-func splitMessagesForSummary(
-	messages []models.Message,
-	recentTokenBudget int,
-) ([]models.Message, int) {
-
-	if len(messages) == 0 {
-		return nil, 0
-	}
-
-	keepTokens := 0
-
-	splitIndex := len(messages)
-
-	for i := len(messages) - 1; i >= 0; i-- {
-
-		cost := EstimateTokens(
-			messages[i].Content,
-		)
-
-		if keepTokens+cost > recentTokenBudget {
+		if recentTokens+tokens > SummaryRecentTokens {
 			break
 		}
 
-		keepTokens += cost
-		splitIndex = i
+		recentTokens += tokens
+		remainingStart = i
 	}
 
-	if splitIndex <= 0 {
-		return nil, 0
+	// Need at least one message to summarize.
+	if remainingStart <= 0 {
+		return
 	}
 
-	return messages[:splitIndex],
-		splitIndex
+	toSummarize := unsummarized[:remainingStart]
+
+	if len(toSummarize) == 0 {
+		return
+	}
+
+	newSummary, err := generateRollingSummary(
+		apiKey,
+		state.Summary,
+		toSummarize,
+	)
+
+	if err != nil {
+		fmt.Println("rolling summary failed:", err)
+		return
+	}
+
+	if strings.TrimSpace(newSummary) == "" {
+		return
+	}
+
+	memory.SetSummary(newSummary)
+
+	// Everything before remainingStart has now been compressed.
+	memory.MarkMessagesSummarized(start + remainingStart)
 }
-
-// -----------------------------------------
-// GENERATE SUMMARY
-// -----------------------------------------
 
 func generateRollingSummary(
 	apiKey string,
@@ -159,257 +110,147 @@ func generateRollingSummary(
 	messages []models.Message,
 ) (string, error) {
 
-	conversationJSON, err :=
-		json.Marshal(messages)
-
-	if err != nil {
-		return "", err
-	}
+	conversation := formatMessages(messages)
 
 	prompt := fmt.Sprintf(`
-You maintain a rolling summary for a long-running
-character conversation.
+You maintain the compressed long-term state of an ongoing conversation.
 
-The summary represents older conversation that is
-no longer kept as individual messages.
+Your job is NOT to summarize every message.
 
-Update the existing summary using ONLY the newly
-absorbed conversation.
+Instead, update the existing conversation summary so that a future assistant can
+continue the conversation naturally even though these older messages will no
+longer be available verbatim.
 
-Preserve:
+Preserve information that would be costly or harmful to forget, especially:
 
-- Important events
-- User facts
-- Character facts
-- Preferences
-- Relationships
-- Decisions
-- Promises and commitments
-- Goals
-- Ongoing situations
-- Important world state
-- Important emotional developments
+- important facts about the user
+- user preferences and dislikes
+- goals, plans, intentions, and decisions
+- promises or commitments
+- relationships between people
+- important past events
+- unresolved questions or ongoing situations
+- important emotional developments
+- established terminology, assumptions, or context
+- facts about the conversation's fictional/world state, if applicable
+- conclusions or decisions already reached
+- constraints that should affect future answers
 
-Do not preserve:
+When something changed over time, preserve the latest/current state and mention
+the change when it matters.
 
-- Greetings
-- Small talk
-- Repetition
-- Exact wording
-- Unimportant details
-- Temporary information without future relevance
+Do NOT preserve:
 
-Do not invent information.
+- greetings
+- routine small talk
+- repetitive statements
+- filler
+- exact wording
+- long explanations whose conclusion is already captured
+- temporary details that have no future relevance
 
-The summary describes what happened.
-It must NOT contain instructions to the assistant.
+The result should read like useful internal context for continuing the same
+conversation, not like a transcript.
 
-Keep the summary dense and concise.
+Keep it compact and information-dense.
+Target approximately %d tokens or less.
 
-Target approximately %d tokens or fewer.
-
-EXISTING ROLLING SUMMARY:
-
+EXISTING SUMMARY:
 %s
 
-NEW CONVERSATION TO ABSORB:
-
+OLDER CONVERSATION TO INCORPORATE:
 %s
 
-Return ONLY valid JSON:
-
-{
-  "summary": "..."
-}
+Return ONLY the updated summary. Do not add headings such as "Summary:".
 `,
 		SummaryMaxTokens,
 		existingSummary,
-		string(conversationJSON),
+		conversation,
 	)
 
-	requestBody := map[string]any{
-		"model": "openrouter/free",
-
-		"messages": []models.Message{
+	reqBody := summaryRequest{
+		Model: "nousresearch/hermes-3-llama-3.1-70b",
+		Messages: []models.Message{
 			{
 				Role:    "user",
 				Content: prompt,
 			},
 		},
-
-		"temperature": 0.1,
-
-		"max_tokens": 600,
-
-		"stream": false,
 	}
 
-	body, err :=
-		json.Marshal(requestBody)
-
+	body, err := json.Marshal(reqBody)
 	if err != nil {
 		return "", err
 	}
 
-	req, err :=
-		http.NewRequest(
-			http.MethodPost,
-			summaryOpenRouterURL,
-			bytes.NewReader(body),
-		)
-
+	req, err := http.NewRequest(
+		"POST",
+		"https://openrouter.ai/api/v1/chat/completions",
+		bytes.NewReader(body),
+	)
 	if err != nil {
 		return "", err
 	}
 
-	req.Header.Set(
-		"Authorization",
-		"Bearer "+apiKey,
-	)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", "application/json")
 
-	req.Header.Set(
-		"Content-Type",
-		"application/json",
-	)
-
-	req.Header.Set(
-		"HTTP-Referer",
-		"http://localhost:8080",
-	)
-
-	req.Header.Set(
-		"X-Title",
-		"My Character Chat Summary",
-	)
-
-	resp, err :=
-		http.DefaultClient.Do(req)
-
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", err
 	}
-
 	defer resp.Body.Close()
 
-	// -----------------------------------------
-	// OPENROUTER ERROR
-	// -----------------------------------------
-
-	if resp.StatusCode < 200 ||
-		resp.StatusCode >= 300 {
-
-		var errorResponse struct {
-			Error struct {
-				Message string `json:"message"`
-			} `json:"error"`
-		}
-
-		if err :=
-			json.NewDecoder(
-				resp.Body,
-			).Decode(&errorResponse); err == nil {
-
-			if errorResponse.Error.Message != "" {
-
-				return "",
-					fmt.Errorf(
-						"OpenRouter summary error: %s",
-						errorResponse.Error.Message,
-					)
-			}
-		}
-
-		return "",
-			fmt.Errorf(
-				"OpenRouter summary returned HTTP %d",
-				resp.StatusCode,
-			)
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
 	}
 
-	// -----------------------------------------
-	// RESPONSE
-	// -----------------------------------------
-
-	var result struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf(
+			"OpenRouter summary request failed: status=%d body=%s",
+			resp.StatusCode,
+			string(responseBody),
+		)
 	}
 
-	if err :=
-		json.NewDecoder(
-			resp.Body,
-		).Decode(&result); err != nil {
+	var result summaryResponse
 
+	if err := json.Unmarshal(responseBody, &result); err != nil {
 		return "", err
 	}
 
 	if len(result.Choices) == 0 {
-		return "",
-			fmt.Errorf(
-				"summary returned no choices",
-			)
+		return "", fmt.Errorf("OpenRouter returned no summary choices")
 	}
 
-	content :=
-		strings.TrimSpace(
-			result.Choices[0].
-				Message.Content,
-		)
-
-	var summaryResult SummaryResult
-
-	if err :=
-		json.Unmarshal(
-			[]byte(content),
-			&summaryResult,
-		); err != nil {
-
-		return "",
-			fmt.Errorf(
-				"invalid summary JSON: %w; response=%q",
-				err,
-				content,
-			)
-	}
-
-	summary :=
-		strings.TrimSpace(
-			summaryResult.Summary,
-		)
-
-	if summary == "" {
-		return "",
-			fmt.Errorf(
-				"summary was empty",
-			)
-	}
-
-	return summary, nil
+	return strings.TrimSpace(result.Choices[0].Message.Content), nil
 }
 
-func EstimateSummaryMessagesTokens(
-	messages []models.Message,
-) int {
+func formatMessages(messages []models.Message) string {
+	var b strings.Builder
 
+	for _, msg := range messages {
+		b.WriteString(strings.ToUpper(msg.Role))
+		b.WriteString(": ")
+		b.WriteString(msg.Content)
+		b.WriteString("\n\n")
+	}
+
+	return b.String()
+}
+
+func countMessageTokens(messages []models.Message) int {
 	total := 0
 
-	for _, message := range messages {
-
-		total += EstimateTokens(
-			message.Content,
-		)
+	for _, msg := range messages {
+		total += estimateTokens(msg.Content)
 	}
 
 	return total
 }
 
-func EstimateTokens(text string) int {
-
-	text = strings.TrimSpace(text)
-
+func estimateTokens(text string) int {
 	if text == "" {
 		return 0
 	}

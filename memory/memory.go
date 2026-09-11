@@ -7,7 +7,7 @@ import (
 	"github.com/MitAyush/chatapp/models"
 )
 
-const MemoryExtractionInterval = 8
+const MemoryExtractionInterval = 3 // for experiment
 
 var (
 	conversationState models.ConversationState
@@ -122,8 +122,7 @@ func GetMessagesForExtraction(
 
 	memoryMu.RLock()
 
-	start :=
-		conversationState.LastExtractedMessage
+	start := conversationState.LastExtractedMessage
 
 	memoryMu.RUnlock()
 
@@ -149,11 +148,9 @@ func MarkMessagesExtracted(
 		messageCount = 0
 	}
 
-	conversationState.LastExtractedMessage =
-		messageCount
+	conversationState.LastExtractedMessage = messageCount
 
-	conversationState.RequestsSinceExtraction =
-		0
+	conversationState.RequestsSinceExtraction = 0
 }
 
 // -----------------------------------------

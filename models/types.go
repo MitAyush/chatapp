@@ -1,21 +1,16 @@
 package models
 
-type OpenRouterResponse struct {
-	Choices []struct {
-		Message Message `json:"message"`
-	} `json:"choices"`
+type ChatRequest struct {
+	Model                string    `json:"model"`
+	Messages             []Message `json:"messages"`
+	CharacterDefinition  string    `json:"character_definition"`
+	BehaviorInstructions string    `json:"behavior_instructions"`
+	ImportantMemory      string    `json:"important_memory"`
 
-	Error *struct {
-		Message string `json:"message"`
-	} `json:"error,omitempty"`
-}
+	ContextBudget int `json:"context_budget"`
 
-type OpenRouterRequest struct {
-	Model       string    `json:"model"`
-	Messages    []Message `json:"messages"`
-	Temperature float64   `json:"temperature,omitempty"`
-	MaxTokens   int       `json:"max_tokens,omitempty"`
-	Stream      bool      `json:"stream,omitempty"`
+	Temperature float64 `json:"temperature"`
+	MaxTokens   int     `json:"max_tokens"`
 }
 
 type Message struct {
@@ -23,48 +18,38 @@ type Message struct {
 	Content string `json:"content"`
 }
 
-type ChatRequest struct {
-	Model string `json:"model"`
+type ConversationState struct {
+	Summary                 string
+	Memories                []Memory
+	RequestsSinceExtraction int
 
-	Messages []Message `json:"messages"`
-
-	CharacterDefinition string `json:"character_definition"`
-
-	BehaviorInstructions string `json:"behavior_instructions"`
-
-	ImportantMemory string `json:"important_memory"`
-
-	// IMPORTANT:
-	// This must match the JavaScript field:
-	// context_budget
-	ContextBudget int `json:"context_budget"`
-
-	Temperature float64 `json:"temperature"`
-
-	MaxTokens int `json:"max_tokens"`
+	LastExtractedMessage  int
+	LastSummarizedMessage int
 }
 
 type Memory struct {
-	ID         int    `json:"id"`
 	Content    string `json:"content"`
 	Importance int    `json:"importance"`
 }
 
-type ConversationState struct {
-	Summary string
-
-	Memories []Memory
-
-	RequestsSinceExtraction int
-
-	LastExtractedMessage int
-
-	LastSummarizedMessage int
+// ContextResult contains the final context sent to the model
+// plus useful information for debugging/token-budget logging.
+type ContextResult struct {
+	Messages []Message
+	Stats    ContextStats
 }
 
-type ContextConfig struct {
-	RecentMessages   int
-	SummarizeAfter   int
-	MaxContextTokens int
-	SummaryMaxTokens int
+// ContextStats describes how the context budget was allocated.
+type ContextStats struct {
+	CharacterTokens      int
+	BehaviorTokens       int
+	MemoryTokens         int
+	SummaryTokens        int
+	HistoryTokens        int
+	CurrentMessageTokens int
+	TotalTokens          int
+	Budget               int
+	RemainingTokens      int
+	IncludedMessages     int
+	DroppedMessages      int
 }

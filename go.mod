@@ -1,4 +1,4 @@
-module github.com/mitayush/chatapp
+module github.com/MitAyush/chatapp
 
 go 1.25.0
 

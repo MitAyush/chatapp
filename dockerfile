@@ -1,6 +1,3 @@
-# =========================
-# Stage 1: Build
-# =========================
 FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
@@ -10,13 +7,20 @@ RUN go mod download
 
 COPY . .
 
+# DEBUG: show exactly what Docker received
+RUN echo "===== /app contents =====" && \
+    find /app -maxdepth 3 -type f -print
+
+RUN echo "===== go.mod =====" && \
+    cat /app/go.mod
+
+RUN echo "===== Go packages =====" && \
+    go list ./...
+
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -mod=mod -ldflags="-s -w" -o chatapp .
+    go build -ldflags="-s -w" -o chatapp .
 
 
-# =========================
-# Stage 2: Runtime
-# =========================
 FROM alpine:3.20
 
 WORKDIR /app

@@ -3,16 +3,17 @@ package context_v1
 import (
 	"strings"
 
-	Memory "github.com/MitAyush/memory"
-	"github.com/MitAyush/models"
+	Memory "github.com/MitAyush/chatapp/memory"
+	"github.com/MitAyush/chatapp/models"
 )
 
-const MaxContextTokens = 300 // for experiment
+const MaxContextTokens = 5000
 
 type ContextStats struct {
 	CharacterTokens      int
 	BehaviorTokens       int
 	MemoryTokens         int
+	SummaryTokens        int
 	HistoryTokens        int
 	CurrentMessageTokens int
 
@@ -30,63 +31,94 @@ type ContextResult struct {
 }
 
 func BuildContextV3(req models.ChatRequest) ContextResult {
+
 	state := Memory.GetConversationState()
 
 	budget := req.ContextBudget
 
-	if budget <= 0 || budget > MaxContextTokens {
+	if budget <= 0 {
 		budget = MaxContextTokens
 	}
 
-	character := strings.TrimSpace(req.CharacterDefinition)
-	behavior := strings.TrimSpace(req.BehaviorInstructions)
-	memory := strings.TrimSpace(req.ImportantMemory)
-
-	systemParts := []string{}
-
-	if character != "" {
-		systemParts = append(systemParts, character)
+	if budget > MaxContextTokens {
+		budget = MaxContextTokens
 	}
 
-	if behavior != "" {
-		systemParts = append(
-			systemParts,
-			"CURRENT BEHAVIOR / RESPONSE INSTRUCTIONS:\n"+behavior,
-		)
-	}
+	character := strings.TrimSpace(
+		req.CharacterDefinition,
+	)
 
-	if memory != "" {
-		systemParts = append(
-			systemParts,
-			"IMPORTANT MEMORY:\n"+memory,
-		)
-	}
+	behavior := strings.TrimSpace(
+		req.BehaviorInstructions,
+	)
+
+	importantMemory := strings.TrimSpace(
+		req.ImportantMemory,
+	)
 
 	automaticMemory := BuildAutomaticMemoryPrompt(
 		state.Memories,
 	)
 
+	// -----------------------------------------
+	// SYSTEM PROMPT
+	// -----------------------------------------
+
+	var systemParts []string
+
+	if character != "" {
+		systemParts = append(
+			systemParts,
+			character,
+		)
+	}
+
+	if behavior != "" {
+		systemParts = append(
+			systemParts,
+			"CURRENT BEHAVIOR / RESPONSE INSTRUCTIONS:\n"+
+				behavior,
+		)
+	}
+
+	if importantMemory != "" {
+		systemParts = append(
+			systemParts,
+			"IMPORTANT MEMORY:\n"+
+				importantMemory,
+		)
+	}
+
 	if automaticMemory != "" {
 		systemParts = append(
 			systemParts,
-			"AUTOMATIC MEMORY:\n"+automaticMemory,
+			"AUTOMATIC MEMORY:\n"+
+				automaticMemory,
 		)
 	}
 
 	if state.Summary != "" {
 		systemParts = append(
 			systemParts,
-			"CONVERSATION SUMMARY:\n"+state.Summary,
+			"ROLLING CONVERSATION SUMMARY:\n"+
+				state.Summary,
 		)
 	}
 
-	systemPrompt := strings.Join(systemParts, "\n\n")
+	systemPrompt := strings.Join(
+		systemParts,
+		"\n\n",
+	)
 
-	// The final message is always protected.
+	// -----------------------------------------
+	// CURRENT MESSAGE
+	// -----------------------------------------
+
 	var history []models.Message
 	var current models.Message
 
 	if len(req.Messages) > 0 {
+
 		current = req.Messages[len(req.Messages)-1]
 
 		if len(req.Messages) > 1 {
@@ -94,25 +126,64 @@ func BuildContextV3(req models.ChatRequest) ContextResult {
 		}
 	}
 
-	systemTokens := EstimateTokens(systemPrompt)
-	currentTokens := EstimateTokens(current.Content)
+	// -----------------------------------------
+	// TOKEN BUDGET
+	// -----------------------------------------
 
-	used := systemTokens + currentTokens
+	outputReserve := req.MaxTokens
 
-	remaining := budget - used
+	if outputReserve <= 0 {
+		outputReserve = 1000
+	}
+
+	// Leave some room for the answer.
+	if outputReserve >= budget {
+		outputReserve = budget / 4
+	}
+
+	inputBudget := budget - outputReserve
+
+	systemTokens := EstimateTokens(
+		systemPrompt,
+	)
+
+	currentTokens := EstimateTokens(
+		current.Content,
+	)
+
+	remaining := inputBudget -
+		systemTokens -
+		currentTokens
 
 	if remaining < 0 {
 		remaining = 0
 	}
+
+	// -----------------------------------------
+	// RECENT HISTORY
+	// -----------------------------------------
 
 	selectedHistory := selectRecentMessages(
 		history,
 		remaining,
 	)
 
-	finalMessages := []models.Message{}
+	historyTokens := EstimateMessagesTokens(
+		selectedHistory,
+	)
+
+	// -----------------------------------------
+	// FINAL MESSAGES
+	// -----------------------------------------
+
+	finalMessages := make(
+		[]models.Message,
+		0,
+		len(selectedHistory)+2,
+	)
 
 	if systemPrompt != "" {
+
 		finalMessages = append(
 			finalMessages,
 			models.Message{
@@ -127,7 +198,8 @@ func BuildContextV3(req models.ChatRequest) ContextResult {
 		selectedHistory...,
 	)
 
-	if current.Content != "" {
+	if strings.TrimSpace(current.Content) != "" {
+
 		finalMessages = append(
 			finalMessages,
 			current,
@@ -135,52 +207,94 @@ func BuildContextV3(req models.ChatRequest) ContextResult {
 	}
 
 	total := systemTokens +
-		currentTokens +
-		EstimateMessagesTokens(selectedHistory)
+		historyTokens +
+		currentTokens
+
+	remainingTokens := inputBudget - total
+
+	if remainingTokens < 0 {
+		remainingTokens = 0
+	}
 
 	return ContextResult{
 		Messages: finalMessages,
+
 		Stats: ContextStats{
-			CharacterTokens:      EstimateTokens(character),
-			BehaviorTokens:       EstimateTokens(behavior),
-			MemoryTokens:         EstimateTokens(memory),
-			HistoryTokens:        EstimateMessagesTokens(selectedHistory),
+			CharacterTokens: EstimateTokens(
+				character,
+			),
+
+			BehaviorTokens: EstimateTokens(
+				behavior,
+			),
+
+			MemoryTokens: EstimateTokens(
+				importantMemory,
+			),
+
+			SummaryTokens: EstimateTokens(
+				state.Summary,
+			),
+
+			HistoryTokens: historyTokens,
+
 			CurrentMessageTokens: currentTokens,
 
 			TotalTokens: total,
-			Budget:      budget,
-			RemainingTokens: maxInt(
-				budget-total,
-				0,
+
+			Budget: budget,
+
+			RemainingTokens: remainingTokens,
+
+			IncludedMessages: len(
+				selectedHistory,
 			),
 
-			IncludedMessages: len(selectedHistory),
-			DroppedMessages:  len(history) - len(selectedHistory),
+			DroppedMessages: len(history) -
+				len(selectedHistory),
 		},
 	}
 }
+
+// -----------------------------------------
+// SELECT RECENT MESSAGES
+// -----------------------------------------
 
 func selectRecentMessages(
 	history []models.Message,
 	budget int,
 ) []models.Message {
 
+	if len(history) == 0 || budget <= 0 {
+		return nil
+	}
+
 	selected := []models.Message{}
+
 	used := 0
 
 	for i := len(history) - 1; i >= 0; i-- {
+
 		message := history[i]
 
-		cost := EstimateTokens(message.Content)
+		cost := EstimateTokens(
+			message.Content,
+		)
 
 		if used+cost > budget {
 			break
 		}
 
-		selected = append(selected, message)
+		selected = append(
+			selected,
+			message,
+		)
+
 		used += cost
 	}
 
+	// We selected newest -> oldest.
+	// Reverse back to chronological order.
 	for left, right := 0, len(selected)-1; left < right; left, right = left+1, right-1 {
 
 		selected[left], selected[right] =
@@ -190,7 +304,14 @@ func selectRecentMessages(
 	return selected
 }
 
-func BuildAutomaticMemoryPrompt(memories []models.Memory) string {
+// -----------------------------------------
+// AUTOMATIC MEMORY
+// -----------------------------------------
+
+func BuildAutomaticMemoryPrompt(
+	memories []models.Memory,
+) string {
+
 	if len(memories) == 0 {
 		return ""
 	}
@@ -198,40 +319,40 @@ func BuildAutomaticMemoryPrompt(memories []models.Memory) string {
 	var builder strings.Builder
 
 	for _, memory := range memories {
+
 		builder.WriteString("- ")
-		builder.WriteString(memory.Content)
+
+		builder.WriteString(
+			memory.Content,
+		)
+
 		builder.WriteString("\n")
 	}
 
-	return strings.TrimSpace(builder.String())
+	return strings.TrimSpace(
+		builder.String(),
+	)
 }
 
-func EstimateMessagesTokens(messages []models.Message) int {
+// -----------------------------------------
+// TOKEN ESTIMATION
+// -----------------------------------------
+
+func EstimateMessagesTokens(
+	messages []models.Message,
+) int {
+
 	total := 0
 
 	for _, message := range messages {
-		total += EstimateTokens(message.Content)
+
+		total += EstimateTokens(
+			message.Content,
+		)
 	}
 
 	return total
 }
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-
-	return b
-}
-
-// ---------------------------------------------
-// Temporary token estimator
-// ---------------------------------------------
-//
-// This is NOT an exact tokenizer.
-// It is intentionally isolated so we can replace
-// it later without changing Context Manager logic.
-//
 
 func EstimateTokens(text string) int {
 
@@ -241,8 +362,9 @@ func EstimateTokens(text string) int {
 		return 0
 	}
 
-	// Rough approximation:
-	// ~4 characters per token.
+	// Approximation.
+	// Later you can replace this with
+	// the actual tokenizer of the selected model.
 	tokens := (len([]rune(text)) + 3) / 4
 
 	if tokens < 1 {

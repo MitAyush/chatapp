@@ -9,33 +9,41 @@ import (
 	"net/http"
 	"strings"
 
-	context_v1 "github.com/MitAyush/handlers/context"
-	Memory "github.com/MitAyush/memory"
-	"github.com/MitAyush/models"
+	context_v1 "github.com/MitAyush/chatapp/handlers/context"
+	Memory "github.com/MitAyush/chatapp/memory"
+	"github.com/MitAyush/chatapp/models"
 )
 
 const openRouterURL = "https://openrouter.ai/api/v1/chat/completions"
 
 func ChatHandler(apiKey string) http.HandlerFunc {
+
 	return func(w http.ResponseWriter, r *http.Request) {
 
 		if r.Method != http.MethodPost {
+
 			http.Error(
 				w,
 				"method not allowed",
 				http.StatusMethodNotAllowed,
 			)
+
 			return
 		}
 
 		var req models.ChatRequest
 
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err :=
+			json.NewDecoder(
+				r.Body,
+			).Decode(&req); err != nil {
+
 			http.Error(
 				w,
 				"invalid JSON",
 				http.StatusBadRequest,
 			)
+
 			return
 		}
 
@@ -51,37 +59,37 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 			req.Temperature = 0.7
 		}
 
-		if req.MaxTokens == 0 {
+		if req.MaxTokens <= 0 {
 			req.MaxTokens = 1000
 		}
 
 		if req.ContextBudget <= 0 {
-			req.ContextBudget = 8000
+			req.ContextBudget = 5000
 		}
 
 		// -----------------------------------------
-		// Context Manager
+		// Build context
 		// -----------------------------------------
 
-		context := context_v1.BuildContextV3(req)
+		contextResult :=
+			context_v1.BuildContextV3(req)
 
-		messages := context.Messages
-
-		// -----------------------------------------
-		// Debug logging
-		// -----------------------------------------
+		messages :=
+			contextResult.Messages
 
 		log.Printf(
-			"context: character=%d behavior=%d memory=%d history=%d current=%d total=%d budget=%d included=%d dropped=%d",
-			context.Stats.CharacterTokens,
-			context.Stats.BehaviorTokens,
-			context.Stats.MemoryTokens,
-			context.Stats.HistoryTokens,
-			context.Stats.CurrentMessageTokens,
-			context.Stats.TotalTokens,
-			context.Stats.Budget,
-			context.Stats.IncludedMessages,
-			context.Stats.DroppedMessages,
+			"context: character=%d behavior=%d memory=%d summary=%d history=%d current=%d total=%d budget=%d remaining=%d included=%d dropped=%d",
+			contextResult.Stats.CharacterTokens,
+			contextResult.Stats.BehaviorTokens,
+			contextResult.Stats.MemoryTokens,
+			contextResult.Stats.SummaryTokens,
+			contextResult.Stats.HistoryTokens,
+			contextResult.Stats.CurrentMessageTokens,
+			contextResult.Stats.TotalTokens,
+			contextResult.Stats.Budget,
+			contextResult.Stats.RemainingTokens,
+			contextResult.Stats.IncludedMessages,
+			contextResult.Stats.DroppedMessages,
 		)
 
 		// -----------------------------------------
@@ -89,41 +97,51 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 		// -----------------------------------------
 
 		openRouterReq := map[string]any{
-			"model":       req.Model,
-			"messages":    messages,
+			"model": req.Model,
+
+			"messages": messages,
+
 			"temperature": req.Temperature,
-			"max_tokens":  req.MaxTokens,
-			"stream":      true,
+
+			"max_tokens": req.MaxTokens,
+
+			"stream": true,
 		}
 
-		body, err := json.Marshal(openRouterReq)
+		body, err :=
+			json.Marshal(openRouterReq)
 
 		if err != nil {
+
 			http.Error(
 				w,
 				"failed to encode request",
 				http.StatusInternalServerError,
 			)
+
 			return
 		}
 
-		httpReq, err := http.NewRequest(
-			http.MethodPost,
-			openRouterURL,
-			bytes.NewReader(body),
-		)
+		httpReq, err :=
+			http.NewRequest(
+				http.MethodPost,
+				openRouterURL,
+				bytes.NewReader(body),
+			)
 
 		if err != nil {
+
 			http.Error(
 				w,
 				"failed to create request",
 				http.StatusInternalServerError,
 			)
+
 			return
 		}
 
 		// -----------------------------------------
-		// OpenRouter headers
+		// Headers
 		// -----------------------------------------
 
 		httpReq.Header.Set(
@@ -147,41 +165,60 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 		)
 
 		// -----------------------------------------
-		// Send request
+		// OpenRouter request
 		// -----------------------------------------
 
-		client := &http.Client{}
-
-		resp, err := client.Do(httpReq)
+		resp, err :=
+			http.DefaultClient.Do(httpReq)
 
 		if err != nil {
+
+			log.Printf(
+				"OpenRouter connection error: %v",
+				err,
+			)
+
 			http.Error(
 				w,
-				err.Error(),
+				fmt.Sprintf(
+					"OpenRouter connection failed: %v",
+					err,
+				),
 				http.StatusBadGateway,
 			)
+
 			return
 		}
 
 		defer resp.Body.Close()
 
 		// -----------------------------------------
-		// OpenRouter error handling
+		// OpenRouter error
 		// -----------------------------------------
 
-		if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode < 200 ||
+			resp.StatusCode >= 300 {
 
 			var errorResponse struct {
 				Error struct {
 					Message string `json:"message"`
+					Code    int    `json:"code"`
 				} `json:"error"`
 			}
 
-			if err := json.NewDecoder(
-				resp.Body,
-			).Decode(&errorResponse); err == nil {
+			if err :=
+				json.NewDecoder(
+					resp.Body,
+				).Decode(&errorResponse); err == nil {
 
 				if errorResponse.Error.Message != "" {
+
+					log.Printf(
+						"OpenRouter error: status=%d code=%d message=%s",
+						resp.StatusCode,
+						errorResponse.Error.Code,
+						errorResponse.Error.Message,
+					)
 
 					http.Error(
 						w,
@@ -224,7 +261,8 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 			"keep-alive",
 		)
 
-		flusher, ok := w.(http.Flusher)
+		flusher, ok :=
+			w.(http.Flusher)
 
 		if !ok {
 
@@ -238,24 +276,32 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 		}
 
 		// -----------------------------------------
+		// Flush headers immediately
+		// -----------------------------------------
+
+		flusher.Flush()
+
+		// -----------------------------------------
 		// Read OpenRouter stream
 		// -----------------------------------------
+
 		var assistantContent strings.Builder
-		decoder :=
+
+		scanner :=
 			bufio.NewScanner(
 				resp.Body,
 			)
 
-		for decoder.Scan() {
+		// Increase scanner limit.
+		scanner.Buffer(
+			make([]byte, 4096),
+			1024*1024,
+		)
+
+		for scanner.Scan() {
 
 			line :=
-				decoder.Text()
-
-			// OpenRouter sends:
-			//
-			// data: {...}
-			//
-			// data: [DONE]
+				scanner.Text()
 
 			if !strings.HasPrefix(
 				line,
@@ -271,12 +317,12 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 				)
 
 			// -------------------------------------
-			// Stream finished
+			// Done
 			// -------------------------------------
 
 			if data == "[DONE]" {
 
-				fmt.Fprintf(
+				fmt.Fprint(
 					w,
 					"data: [DONE]\n\n",
 				)
@@ -287,7 +333,7 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 			}
 
 			// -------------------------------------
-			// Parse stream chunk
+			// Parse chunk
 			// -------------------------------------
 
 			var chunk struct {
@@ -298,10 +344,11 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 				} `json:"choices"`
 			}
 
-			if err := json.Unmarshal(
-				[]byte(data),
-				&chunk,
-			); err != nil {
+			if err :=
+				json.Unmarshal(
+					[]byte(data),
+					&chunk,
+				); err != nil {
 
 				continue
 			}
@@ -317,9 +364,13 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 			if content == "" {
 				continue
 			}
-			assistantContent.WriteString(content)
+
+			assistantContent.WriteString(
+				content,
+			)
+
 			// -------------------------------------
-			// Send token to browser
+			// Send plain text SSE to browser
 			// -------------------------------------
 
 			fmt.Fprintf(
@@ -331,74 +382,152 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 			flusher.Flush()
 		}
 
-		if err := decoder.Err(); err != nil {
-			log.Println("stream error:", err)
+		if err := scanner.Err(); err != nil {
+
+			log.Printf(
+				"OpenRouter stream error: %v",
+				err,
+			)
+
+			return
 		}
-		maybeExtractMemories(apiKey, req.Messages)
-		assistantText := strings.TrimSpace(assistantContent.String())
 
-		if assistantText != "" {
-			conversation := make([]models.Message, 0, len(req.Messages)+1)
-			conversation = append(conversation, req.Messages...)
-			conversation = append(conversation, models.Message{
-				Role:    "assistant",
-				Content: assistantText,
-			})
+		// -----------------------------------------
+		// Complete assistant response
+		// -----------------------------------------
 
-			if err := UpdateRollingSummary(apiKey, conversation); err != nil {
-				log.Println("rolling summary error:", err)
-			}
+		// -----------------------------------------
+		// Stream finished
+		// -----------------------------------------
+
+		assistantText :=
+			strings.TrimSpace(
+				assistantContent.String(),
+			)
+
+		if assistantText == "" {
+			return
+		}
+
+		// -----------------------------------------
+		// Full conversation
+		// -----------------------------------------
+
+		conversation :=
+			make(
+				[]models.Message,
+				0,
+				len(req.Messages)+1,
+			)
+
+		conversation =
+			append(
+				conversation,
+				req.Messages...,
+			)
+
+		conversation =
+			append(
+				conversation,
+				models.Message{
+					Role:    "assistant",
+					Content: assistantText,
+				},
+			)
+
+		// -----------------------------------------
+		// Automatic memory
+		// -----------------------------------------
+
+		maybeExtractMemories(
+			apiKey,
+			conversation,
+		)
+
+		// -----------------------------------------
+		// Rolling summary
+		// -----------------------------------------
+
+		if err :=
+			UpdateRollingSummary(
+				apiKey,
+				conversation,
+			); err != nil {
+
+			// IMPORTANT:
+			// The chat already succeeded.
+			// Do not return 502 here.
+			log.Printf(
+				"rolling summary error: %v",
+				err,
+			)
 		}
 	}
 }
 
-func maybeExtractMemories(apiKey string,
+// =============================================
+// AUTOMATIC MEMORY
+// =============================================
+
+func maybeExtractMemories(
+	apiKey string,
 	messages []models.Message,
 ) {
-	count := Memory.IncrementRequestCount()
+
+	count :=
+		Memory.IncrementRequestCount()
 
 	if count < Memory.MemoryExtractionInterval {
 		return
 	}
 
-	extractionMessages := Memory.GetMessagesForExtraction(messages)
+	extractionMessages :=
+		Memory.GetMessagesForExtraction(
+			messages,
+		)
 
 	if len(extractionMessages) == 0 {
+
 		Memory.ResetRequestCount()
+
 		return
 	}
 
-	state := Memory.GetConversationState()
+	state :=
+		Memory.GetConversationState()
 
-	newMemories, err := Memory.ExtractMemories(
-		apiKey,
-		extractionMessages,
-		state.Memories,
-	)
+	newMemories, err :=
+		Memory.ExtractMemories(
+			apiKey,
+			extractionMessages,
+			state.Memories,
+		)
 
 	if err != nil {
+
 		log.Println(
 			"memory extraction error:",
 			err,
 		)
 
-		// Do NOT mark messages as extracted.
-		//
-		// This allows the next extraction attempt
-		// to try again.
 		Memory.ResetRequestCount()
 
 		return
 	}
 
 	if len(newMemories) > 0 {
-		Memory.AddMemories(newMemories)
+
+		Memory.AddMemories(
+			newMemories,
+		)
 
 		log.Printf(
-			"memory extraction: added %d memories\n",
+			"memory extraction: added %d memories",
 			len(newMemories),
 		)
+
 	} else {
+
 		log.Println(
 			"memory extraction: no new memories",
 		)

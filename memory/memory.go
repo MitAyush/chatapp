@@ -4,24 +4,52 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/MitAyush/models"
+	"github.com/MitAyush/chatapp/models"
 )
 
 const MemoryExtractionInterval = 8
 
 var (
 	conversationState models.ConversationState
-	memoryMu          sync.RWMutex
+
+	memoryMu sync.RWMutex
 )
 
+// -----------------------------------------
+// STATE
+// -----------------------------------------
+
 func GetConversationState() models.ConversationState {
+
 	memoryMu.RLock()
 	defer memoryMu.RUnlock()
 
 	return conversationState
 }
 
+// -----------------------------------------
+// RESET
+// -----------------------------------------
+
+// ResetConversationState completely clears the
+// in-memory conversation state.
+//
+// Call this when starting a new chat.
+func ResetConversationState() {
+
+	memoryMu.Lock()
+	defer memoryMu.Unlock()
+
+	conversationState =
+		models.ConversationState{}
+}
+
+// -----------------------------------------
+// REQUEST COUNT
+// -----------------------------------------
+
 func IncrementRequestCount() int {
+
 	memoryMu.Lock()
 	defer memoryMu.Unlock()
 
@@ -31,34 +59,72 @@ func IncrementRequestCount() int {
 }
 
 func ResetRequestCount() {
+
 	memoryMu.Lock()
 	defer memoryMu.Unlock()
 
 	conversationState.RequestsSinceExtraction = 0
 }
 
-func AddMemories(memories []models.Memory) {
+// -----------------------------------------
+// MEMORIES
+// -----------------------------------------
+
+func AddMemories(
+	memories []models.Memory,
+) {
+
 	memoryMu.Lock()
 	defer memoryMu.Unlock()
 
 	for _, memory := range memories {
-		if strings.TrimSpace(memory.Content) == "" {
+
+		if strings.TrimSpace(
+			memory.Content,
+		) == "" {
 			continue
 		}
 
-		conversationState.Memories = append(
-			conversationState.Memories,
-			memory,
-		)
+		conversationState.Memories =
+			append(
+				conversationState.Memories,
+				memory,
+			)
 	}
 }
+
+func GetMemories() []models.Memory {
+
+	memoryMu.RLock()
+	defer memoryMu.RUnlock()
+
+	memories :=
+		make(
+			[]models.Memory,
+			len(conversationState.Memories),
+		)
+
+	copy(
+		memories,
+		conversationState.Memories,
+	)
+
+	return memories
+}
+
+// -----------------------------------------
+// MEMORY EXTRACTION CURSOR
+// -----------------------------------------
 
 func GetMessagesForExtraction(
 	messages []models.Message,
 ) []models.Message {
 
 	memoryMu.RLock()
-	start := conversationState.LastExtractedMessage
+
+	start :=
+		conversationState.LastExtractedMessage
+
 	memoryMu.RUnlock()
 
 	if start < 0 {
@@ -72,38 +138,50 @@ func GetMessagesForExtraction(
 	return messages[start:]
 }
 
-func MarkMessagesExtracted(messageCount int) {
+func MarkMessagesExtracted(
+	messageCount int,
+) {
+
 	memoryMu.Lock()
 	defer memoryMu.Unlock()
 
-	conversationState.LastExtractedMessage = messageCount
-	conversationState.RequestsSinceExtraction = 0
+	if messageCount < 0 {
+		messageCount = 0
+	}
+
+	conversationState.LastExtractedMessage =
+		messageCount
+
+	conversationState.RequestsSinceExtraction =
+		0
 }
 
-func SetSummary(summary string) {
+// -----------------------------------------
+// SUMMARY
+// -----------------------------------------
+
+func SetSummary(
+	summary string,
+) {
+
 	memoryMu.Lock()
 	defer memoryMu.Unlock()
 
-	conversationState.Summary = strings.TrimSpace(summary)
+	conversationState.Summary =
+		strings.TrimSpace(summary)
 }
 
-func MarkMessagesSummarized(messageCount int) {
+func MarkMessagesSummarized(
+	messageCount int,
+) {
+
 	memoryMu.Lock()
 	defer memoryMu.Unlock()
 
-	conversationState.LastSummarizedMessage = messageCount
-}
+	if messageCount < 0 {
+		messageCount = 0
+	}
 
-func GetMemories() []models.Memory {
-	memoryMu.RLock()
-	defer memoryMu.RUnlock()
-
-	memories := make([]models.Memory, len(conversationState.Memories))
-
-	copy(
-		memories,
-		conversationState.Memories,
-	)
-
-	return memories
+	conversationState.LastSummarizedMessage =
+		messageCount
 }

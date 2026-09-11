@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/MitAyush/db"
+	"github.com/MitAyush/chatapp/db"
 )
 
 type SaveChatRequest struct {

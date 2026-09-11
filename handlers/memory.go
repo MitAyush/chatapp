@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	Memory "github.com/MitAyush/memory"
+	Memory "github.com/MitAyush/chatapp/memory"
 )
 
 func MemoryHandler(w http.ResponseWriter, r *http.Request) {

@@ -1,0 +1,13 @@
+.git
+.github
+.vscode
+
+.env
+.env.*
+
+*.log
+
+tmp/
+bin/
+
+chats.db

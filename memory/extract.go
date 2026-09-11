@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/MitAyush/models"
+	"github.com/MitAyush/chatapp/models"
 )
 
 const openRouterURL = "https://openrouter.ai/api/v1/chat/completions"

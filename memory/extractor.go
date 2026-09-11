@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/MitAyush/models"
+	"github.com/MitAyush/chatapp/models"
 )
 
 type MemoryExtractionResult struct {

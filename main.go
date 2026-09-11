@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/MitAyush/db"
-	"github.com/MitAyush/handlers"
+	"github.com/MitAyush/chatapp/db"
+	"github.com/MitAyush/chatapp/handlers"
 )
 
 func main() {
@@ -17,7 +17,12 @@ func main() {
 		log.Fatal("apikey not found")
 	}
 
-	if err := db.Init("chats.db"); err != nil {
+	dbPath := os.Getenv("DB_PATH")
+	if dbPath == "" {
+		dbPath = "chats.db"
+	}
+
+	if err := db.Init(dbPath); err != nil {
 		log.Fatal("database initialization failed:", err)
 	}
 

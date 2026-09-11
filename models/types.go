@@ -15,6 +15,7 @@ type OpenRouterRequest struct {
 	Messages    []Message `json:"messages"`
 	Temperature float64   `json:"temperature,omitempty"`
 	MaxTokens   int       `json:"max_tokens,omitempty"`
+	Stream      bool      `json:"stream,omitempty"`
 }
 
 type Message struct {
@@ -33,7 +34,10 @@ type ChatRequest struct {
 
 	ImportantMemory string `json:"important_memory"`
 
-	ContextBudget int `json:"BuildContextV3"`
+	// IMPORTANT:
+	// This must match the JavaScript field:
+	// context_budget
+	ContextBudget int `json:"context_budget"`
 
 	Temperature float64 `json:"temperature"`
 

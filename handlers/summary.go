@@ -38,7 +38,6 @@ type summaryResponse struct {
 
 func UpdateRollingSummary(apiKey string, messages []models.Message) {
 	state := memory.GetConversationState()
-
 	start := state.LastSummarizedMessage
 
 	if start < 0 {
@@ -50,7 +49,6 @@ func UpdateRollingSummary(apiKey string, messages []models.Message) {
 	}
 
 	unsummarized := messages[start:]
-
 	unsummarizedTokens := countMessageTokens(unsummarized)
 
 	if unsummarizedTokens < SummaryTriggerTokens {
@@ -109,7 +107,6 @@ func generateRollingSummary(
 	existingSummary string,
 	messages []models.Message,
 ) (string, error) {
-
 	conversation := formatMessages(messages)
 
 	prompt := fmt.Sprintf(`
@@ -246,7 +243,6 @@ func countMessageTokens(messages []models.Message) int {
 	for _, msg := range messages {
 		total += estimateTokens(msg.Content)
 	}
-
 	return total
 }
 
@@ -254,6 +250,5 @@ func estimateTokens(text string) int {
 	if text == "" {
 		return 0
 	}
-
 	return (len([]rune(text)) + 3) / 4
 }

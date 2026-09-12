@@ -15,7 +15,6 @@ func BuildMemoryExtractionPrompt(
 	messages []models.Message,
 	existingMemories []models.Memory,
 ) string {
-
 	conversationJSON, err := json.Marshal(messages)
 	if err != nil {
 		conversationJSON = []byte("[]")

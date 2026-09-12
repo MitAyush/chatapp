@@ -39,11 +39,7 @@ func SaveChatHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := db.SaveChat(req.Name, req.Data); err != nil {
-		http.Error(
-			w,
-			"failed to save chat: "+err.Error(),
-			http.StatusInternalServerError,
-		)
+		http.Error(w, "failed to save chat: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 

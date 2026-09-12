@@ -16,11 +16,7 @@ func ListChatsHandler(w http.ResponseWriter, r *http.Request) {
 
 	chats, err := db.ListChats()
 	if err != nil {
-		http.Error(
-			w,
-			"failed to list chats: "+err.Error(),
-			http.StatusInternalServerError,
-		)
+		http.Error(w, "failed to list chats: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -39,7 +35,6 @@ func ListChatsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-
 	json.NewEncoder(w).Encode(result)
 }
 
@@ -63,7 +58,6 @@ func LoadChatHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-
 	json.NewEncoder(w).Encode(map[string]any{
 		"name": chat.Name,
 		"data": json.RawMessage(chat.Data),

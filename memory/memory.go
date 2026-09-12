@@ -11,8 +11,7 @@ const MemoryExtractionInterval = 3 // for experiment
 
 var (
 	conversationState models.ConversationState
-
-	memoryMu sync.RWMutex
+	memoryMu          sync.RWMutex
 )
 
 // -----------------------------------------
@@ -20,7 +19,6 @@ var (
 // -----------------------------------------
 
 func GetConversationState() models.ConversationState {
-
 	memoryMu.RLock()
 	defer memoryMu.RUnlock()
 
@@ -36,12 +34,10 @@ func GetConversationState() models.ConversationState {
 //
 // Call this when starting a new chat.
 func ResetConversationState() {
-
 	memoryMu.Lock()
 	defer memoryMu.Unlock()
 
-	conversationState =
-		models.ConversationState{}
+	conversationState = models.ConversationState{}
 }
 
 // -----------------------------------------
@@ -49,17 +45,14 @@ func ResetConversationState() {
 // -----------------------------------------
 
 func IncrementRequestCount() int {
-
 	memoryMu.Lock()
 	defer memoryMu.Unlock()
 
 	conversationState.RequestsSinceExtraction++
-
 	return conversationState.RequestsSinceExtraction
 }
 
 func ResetRequestCount() {
-
 	memoryMu.Lock()
 	defer memoryMu.Unlock()
 
@@ -70,44 +63,25 @@ func ResetRequestCount() {
 // MEMORIES
 // -----------------------------------------
 
-func AddMemories(
-	memories []models.Memory,
-) {
-
+func AddMemories(memories []models.Memory) {
 	memoryMu.Lock()
 	defer memoryMu.Unlock()
 
 	for _, memory := range memories {
-
-		if strings.TrimSpace(
-			memory.Content,
-		) == "" {
+		if strings.TrimSpace(memory.Content) == "" {
 			continue
 		}
 
-		conversationState.Memories =
-			append(
-				conversationState.Memories,
-				memory,
-			)
+		conversationState.Memories = append(conversationState.Memories, memory)
 	}
 }
 
 func GetMemories() []models.Memory {
-
 	memoryMu.RLock()
 	defer memoryMu.RUnlock()
 
-	memories :=
-		make(
-			[]models.Memory,
-			len(conversationState.Memories),
-		)
-
-	copy(
-		memories,
-		conversationState.Memories,
-	)
+	memories := make([]models.Memory, len(conversationState.Memories))
+	copy(memories, conversationState.Memories)
 
 	return memories
 }
@@ -116,14 +90,9 @@ func GetMemories() []models.Memory {
 // MEMORY EXTRACTION CURSOR
 // -----------------------------------------
 
-func GetMessagesForExtraction(
-	messages []models.Message,
-) []models.Message {
-
+func GetMessagesForExtraction(messages []models.Message) []models.Message {
 	memoryMu.RLock()
-
 	start := conversationState.LastExtractedMessage
-
 	memoryMu.RUnlock()
 
 	if start < 0 {
@@ -137,10 +106,7 @@ func GetMessagesForExtraction(
 	return messages[start:]
 }
 
-func MarkMessagesExtracted(
-	messageCount int,
-) {
-
+func MarkMessagesExtracted(messageCount int) {
 	memoryMu.Lock()
 	defer memoryMu.Unlock()
 
@@ -149,7 +115,6 @@ func MarkMessagesExtracted(
 	}
 
 	conversationState.LastExtractedMessage = messageCount
-
 	conversationState.RequestsSinceExtraction = 0
 }
 
@@ -157,21 +122,14 @@ func MarkMessagesExtracted(
 // SUMMARY
 // -----------------------------------------
 
-func SetSummary(
-	summary string,
-) {
-
+func SetSummary(summary string) {
 	memoryMu.Lock()
 	defer memoryMu.Unlock()
 
-	conversationState.Summary =
-		strings.TrimSpace(summary)
+	conversationState.Summary = strings.TrimSpace(summary)
 }
 
-func MarkMessagesSummarized(
-	messageCount int,
-) {
-
+func MarkMessagesSummarized(messageCount int) {
 	memoryMu.Lock()
 	defer memoryMu.Unlock()
 
@@ -179,6 +137,5 @@ func MarkMessagesSummarized(
 		messageCount = 0
 	}
 
-	conversationState.LastSummarizedMessage =
-		messageCount
+	conversationState.LastSummarizedMessage = messageCount
 }

@@ -10,10 +10,7 @@ import (
 )
 
 const (
-	MaxContextTokens = 300 // experiment
-
-	// Reserve tokens for the model's response.
-	DefaultOutputReserve = 1000
+	MaxContextTokens = 5000 // experiment
 
 	// Keep approximately this much recent conversation verbatim.
 	RecentConversationTokens = 1500
@@ -41,16 +38,12 @@ func BuildContextV3(req models.ChatRequest) []models.Message {
 		budget = MaxContextTokens
 	}
 
-	outputReserve := req.MaxTokens
-	if outputReserve <= 0 {
-		outputReserve = DefaultOutputReserve
-	}
-
-	// Never allow output reservation to consume the entire context.
-	inputBudget := budget - outputReserve
-	if inputBudget < 1000 {
-		inputBudget = 1000
-	}
+	// The context budget is the INPUT budget.
+	//
+	// req.MaxTokens is the OUTPUT budget and should not
+	// reduce the amount of conversation we are allowed
+	// to send.
+	inputBudget := budget
 
 	// The last message is assumed to be the current user message.
 	currentMessage := models.Message{}
@@ -64,33 +57,28 @@ func BuildContextV3(req models.ChatRequest) []models.Message {
 	var systemParts []string
 
 	if req.CharacterDefinition != "" {
-		systemParts = append(systemParts,
-			"CHARACTER:\n"+req.CharacterDefinition)
+		systemParts = append(systemParts, "CHARACTER:\n"+req.CharacterDefinition)
 	}
 
 	if req.BehaviorInstructions != "" {
-		systemParts = append(systemParts,
-			"BEHAVIOR:\n"+req.BehaviorInstructions)
+		systemParts = append(systemParts, "BEHAVIOR:\n"+req.BehaviorInstructions)
 	}
 
 	if req.ImportantMemory != "" {
-		systemParts = append(systemParts,
-			"IMPORTANT MEMORY:\n"+req.ImportantMemory)
+		systemParts = append(systemParts, "IMPORTANT MEMORY:\n"+req.ImportantMemory)
 	}
 
 	// Add automatic memories.
 	memoryText := buildMemoryContext(state.Memories, MemoryTokens)
+
 	if memoryText != "" {
-		systemParts = append(systemParts,
-			"RELEVANT MEMORIES:\n"+memoryText)
+		systemParts = append(systemParts, "RELEVANT MEMORIES:\n"+memoryText)
 	}
 
 	// Add rolling summary.
 	if state.Summary != "" {
 		summary := trimToTokens(state.Summary, SummaryTokens)
-
-		systemParts = append(systemParts,
-			"CONVERSATION SUMMARY:\n"+summary)
+		systemParts = append(systemParts, "CONVERSATION SUMMARY:\n"+summary)
 	}
 
 	systemMessage := models.Message{
@@ -98,20 +86,21 @@ func BuildContextV3(req models.ChatRequest) []models.Message {
 		Content: strings.Join(systemParts, "\n\n"),
 	}
 
-	usedTokens := estimateTokens(systemMessage.Content)
-
-	// Current user message must always be preserved.
+	systemTokens := estimateTokens(systemMessage.Content)
 	currentTokens := estimateTokens(currentMessage.Content)
 
-	remaining := inputBudget - usedTokens - currentTokens
+	// Current message should always be included.
+	remaining := inputBudget - systemTokens - currentTokens
 
 	if remaining < 0 {
-		log.Println("no remaining budget")
+		log.Printf("context: system+current exceed budget: system=%d current=%d budget=%d", systemTokens, currentTokens, inputBudget)
 		remaining = 0
 	}
 
-	// Recent conversation gets a dedicated budget.
+	// Recent conversation gets a dedicated budget,
+	// but cannot exceed whatever is actually left.
 	recentBudget := RecentConversationTokens
+
 	if recentBudget > remaining {
 		recentBudget = remaining
 	}
@@ -123,7 +112,13 @@ func BuildContextV3(req models.ChatRequest) []models.Message {
 
 	result = append(result, systemMessage)
 	result = append(result, recentMessages...)
-	result = append(result, currentMessage)
+
+	// Only append current message if one exists.
+	if currentMessage.Content != "" {
+		result = append(result, currentMessage)
+	}
+
+	log.Printf("context budget: budget=%d system=%d current=%d recent_budget=%d remaining=%d messages=%d\n", inputBudget, systemTokens, currentTokens, recentBudget, remaining, len(result))
 
 	return result
 }
@@ -131,12 +126,13 @@ func BuildContextV3(req models.ChatRequest) []models.Message {
 // selectRecentMessages preserves complete recent messages verbatim.
 // It walks backwards through the conversation and only includes a message
 // if the entire message fits.
-func selectRecentMessages(
-	messages []models.Message,
-	budget int,
-) []models.Message {
-	if budget <= 0 || len(messages) == 0 {
+func selectRecentMessages(messages []models.Message, budget int) []models.Message {
+	if budget <= 0 {
 		log.Println("no budget to select recent msg")
+		return nil
+	}
+
+	if len(messages) == 0 {
 		return nil
 	}
 
@@ -155,7 +151,8 @@ func selectRecentMessages(
 		used += tokens
 	}
 
-	// We selected backwards, so restore chronological order.
+	// We selected backwards,
+	// so restore chronological order.
 	for i, j := 0, len(selected)-1; i < j; i, j = i+1, j-1 {
 		selected[i], selected[j] = selected[j], selected[i]
 	}
@@ -163,10 +160,7 @@ func selectRecentMessages(
 	return selected
 }
 
-func buildMemoryContext(
-	memories []models.Memory,
-	budget int,
-) string {
+func buildMemoryContext(memories []models.Memory, budget int) string {
 	if len(memories) == 0 {
 		return ""
 	}

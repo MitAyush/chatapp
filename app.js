@@ -1,22 +1,32 @@
 let messages = [];
+let memories = [];
+let lastOpenRouterRequestBody = "";
 
 // ==============================
 // DOM ELEMENTS
 // ==============================
+
 const savedChatsElement = document.getElementById("savedChats");
+
 const loadChatButton = document.getElementById("loadChat");
 
 const chatNameElement = document.getElementById("chatName");
+
 const saveChatButton = document.getElementById("saveChat");
+
 const characterNameElement = document.getElementById("characterName");
 
 const characterPromptElement = document.getElementById("characterPrompt");
 
-const behaviorPromptElement = document.getElementById("behaviorPrompt");
+const userCharacterElement = document.getElementById("userCharacter");
 
-const memoryPromptElement = document.getElementById("memoryPrompt");
+const nextInstructionsElement = document.getElementById("nextInstructions");
 
 const automaticMemoryElement = document.getElementById("automaticMemory");
+
+const memoryEmptyElement = document.getElementById("memoryEmpty");
+
+const addMemoryButton = document.getElementById("addMemory");
 
 const contextBudgetElement = document.getElementById("contextBudget");
 
@@ -37,6 +47,7 @@ const debugElement = document.getElementById("debug");
 const sendButton = document.getElementById("send");
 
 const clearButton = document.getElementById("clearChat");
+const secretElement = document.getElementById("secret");
 
 // ==============================
 // CHARACTER
@@ -57,27 +68,224 @@ ${prompt}`;
 }
 
 // ==============================
-// BEHAVIOR
+// USER CHARACTER
 // ==============================
 
-function getBehaviorInstructions() {
-  return behaviorPromptElement.value.trim();
+function getUserCharacter() {
+  return userCharacterElement.value.trim();
 }
 
 // ==============================
-// MEMORY
+// WHAT TO DO NEXT
 // ==============================
 
-function getImportantMemory() {
-  return memoryPromptElement.value.trim();
+function getNextInstructions() {
+  return nextInstructionsElement.value.trim();
 }
 
-function getAutomaticMemory() {
-  if (!automaticMemoryElement) {
-    return "";
+// ==============================
+// MEMORY ID
+// ==============================
+
+function createMemoryId() {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
   }
 
-  return automaticMemoryElement.value.trim();
+  return (
+    "memory-" + Date.now() + "-" + Math.random().toString(36).substring(2, 10)
+  );
+}
+
+// ==============================
+// NORMALIZE MEMORY
+// ==============================
+
+function normalizeMemory(memory) {
+  return {
+    id: memory.id || createMemoryId(),
+
+    content: typeof memory.content === "string" ? memory.content : "",
+
+    importance: Number.isFinite(Number(memory.importance))
+      ? Math.max(1, Math.min(10, Number(memory.importance)))
+      : 5,
+
+    enabled: memory.enabled !== false,
+  };
+}
+
+// ==============================
+// MEMORY UI
+// ==============================
+
+function renderMemories() {
+  if (!automaticMemoryElement) {
+    return;
+  }
+
+  automaticMemoryElement.innerHTML = "";
+
+  if (memories.length === 0) {
+    if (memoryEmptyElement) {
+      memoryEmptyElement.style.display = "block";
+    }
+
+    return;
+  }
+
+  if (memoryEmptyElement) {
+    memoryEmptyElement.style.display = "none";
+  }
+
+  memories.forEach((memory) => {
+    const row = document.createElement("div");
+
+    row.className = "memory-item";
+
+    if (!memory.enabled) {
+      row.classList.add("memory-disabled");
+    }
+
+    // ==============================
+    // ENABLE CHECKBOX
+    // ==============================
+
+    const checkbox = document.createElement("input");
+
+    checkbox.type = "checkbox";
+
+    checkbox.checked = memory.enabled;
+
+    checkbox.title = "Include this memory in context";
+
+    checkbox.addEventListener("change", () => {
+      memory.enabled = checkbox.checked;
+
+      renderMemories();
+      updateDebug();
+    });
+
+    // ==============================
+    // CONTENT
+    // ==============================
+
+    const content = document.createElement("textarea");
+
+    content.className = "memory-content";
+
+    content.value = memory.content;
+
+    content.rows = 2;
+
+    content.placeholder = "Memory content...";
+
+    content.addEventListener("input", () => {
+      memory.content = content.value;
+
+      updateDebug();
+    });
+
+    // ==============================
+    // IMPORTANCE
+    // ==============================
+
+    const importance = document.createElement("input");
+
+    importance.type = "number";
+
+    importance.min = "1";
+    importance.max = "10";
+    importance.step = "1";
+
+    importance.value = memory.importance;
+
+    importance.title = "Importance (1-10)";
+
+    importance.className = "memory-importance";
+
+    importance.addEventListener("change", () => {
+      let value = Number(importance.value);
+
+      if (!Number.isFinite(value)) {
+        value = 5;
+      }
+
+      value = Math.max(1, Math.min(10, value));
+
+      memory.importance = value;
+
+      importance.value = value;
+
+      updateDebug();
+    });
+
+    // ==============================
+    // DELETE
+    // ==============================
+
+    const deleteButton = document.createElement("button");
+
+    deleteButton.type = "button";
+
+    deleteButton.className = "memory-delete-button";
+
+    deleteButton.textContent = "Delete";
+
+    deleteButton.addEventListener("click", () => {
+      memories = memories.filter((item) => item.id !== memory.id);
+
+      renderMemories();
+      updateDebug();
+    });
+
+    // ==============================
+    // ACTIONS
+    // ==============================
+
+    const actions = document.createElement("div");
+
+    actions.className = "memory-actions";
+
+    actions.appendChild(importance);
+
+    actions.appendChild(deleteButton);
+
+    // ==============================
+    // ROW
+    // ==============================
+
+    row.appendChild(checkbox);
+
+    row.appendChild(content);
+
+    row.appendChild(actions);
+
+    automaticMemoryElement.appendChild(row);
+  });
+}
+
+// ==============================
+// ADD MEMORY
+// ==============================
+
+function addMemory() {
+  const memory = normalizeMemory({
+    id: createMemoryId(),
+    content: "",
+    enabled: true,
+  });
+
+  memories.push(memory);
+
+  renderMemories();
+  updateDebug();
+
+  const textareas = automaticMemoryElement.querySelectorAll(".memory-content");
+
+  if (textareas.length > 0) {
+    textareas[textareas.length - 1].focus();
+  }
 }
 
 // ==============================
@@ -87,12 +295,15 @@ function getAutomaticMemory() {
 function getContextBudget() {
   const value = Number(contextBudgetElement.value);
 
-  // V3 hard maximum.
   if (!value || value < 1000) {
     return 5000;
   }
 
   return Math.min(value, 5000);
+}
+
+function getSecret() {
+  return secretElement.value;
 }
 
 // ==============================
@@ -137,42 +348,34 @@ function renderMessages() {
 // ==============================
 
 function updateDebug() {
-  const characterDefinition = getCharacterDefinition();
-
-  const behaviorInstructions = getBehaviorInstructions();
-
-  const importantMemory = getImportantMemory();
-
-  const automaticMemory = getAutomaticMemory();
-
   const now = new Date();
 
-  const history = messages
-    .map((message) => `${message.role}: ${message.content}`)
-    .join("\n\n");
+  const memoryDebug = memories
+    .map(
+      (memory) =>
+        `[${memory.enabled ? "ON" : "OFF"}] ` +
+        `(importance ${memory.importance}) ` +
+        memory.content
+    )
+    .join("\n");
 
-  debugElement.textContent = `
-
-DATETIME
+  debugElement.textContent = `DATETIME
 ${now.toLocaleTimeString()}
 
-CHARACTER
-${characterDefinition}
+AI CHARACTER
+${getCharacterDefinition()}
 
-BEHAVIOR
-${behaviorInstructions}
+USER CHARACTER
+${getUserCharacter()}
 
-IMPORTANT MEMORY
-${importantMemory}
+MEMORY
+${memoryDebug || "No memories yet."}
 
-AUTOMATIC MEMORY
-${automaticMemory}
+WHAT TO DO NEXT
+${getNextInstructions()}
 
-HISTORY
-${history}
-
-MODEL
-${modelElement.value}
+LAST REQUEST
+${lastOpenRouterRequestBody || "No OpenRouter request has been sent yet."}
 
 TEMPERATURE
 ${temperatureElement.value}
@@ -182,6 +385,71 @@ ${maxTokensElement.value} tokens
 
 CONTEXT BUDGET
 ${getContextBudget()} tokens`;
+}
+
+// ==============================
+// OPENROUTER REQUEST EVENT
+// ==============================
+
+function handleOpenRouterRequestEvent(data) {
+  const json = data.substring("[OPENROUTER_REQUEST]".length);
+
+  try {
+    const requestBody = JSON.parse(json);
+
+    lastOpenRouterRequestBody = JSON.stringify(requestBody, null, 2);
+  } catch (error) {
+    console.error("Failed to parse OpenRouter request:", error);
+
+    lastOpenRouterRequestBody = json;
+  }
+
+  updateDebug();
+}
+
+// ==============================
+// MEMORY EVENT
+// ==============================
+
+function handleMemoryEvent(data) {
+  const json = data.substring("[MEMORIES]".length);
+
+  let extracted;
+
+  try {
+    extracted = JSON.parse(json);
+  } catch (error) {
+    console.error("Failed to parse memory event:", error);
+
+    return;
+  }
+
+  if (!Array.isArray(extracted)) {
+    return;
+  }
+
+  for (const memory of extracted) {
+    const normalized = normalizeMemory(memory);
+
+    if (!normalized.content.trim()) {
+      continue;
+    }
+
+    const duplicate = memories.some(
+      (existing) =>
+        existing.content.trim().toLowerCase() ===
+        normalized.content.trim().toLowerCase()
+    );
+
+    if (duplicate) {
+      continue;
+    }
+
+    memories.push(normalized);
+  }
+
+  renderMemories();
+  updateDebug();
 }
 
 // ==============================
@@ -195,7 +463,6 @@ async function sendMessage() {
     return;
   }
 
-  // Prevent duplicate requests.
   if (sendButton.disabled) {
     return;
   }
@@ -224,20 +491,22 @@ async function sendMessage() {
 
       body: JSON.stringify({
         model: modelElement.value.trim(),
-
         messages: messages,
+
+        memories: memories,
 
         character_definition: getCharacterDefinition(),
 
-        behavior_instructions: getBehaviorInstructions(),
+        user_character: getUserCharacter(),
 
-        important_memory: getImportantMemory(),
+        next_instructions: getNextInstructions(),
 
         context_budget: getContextBudget(),
 
         temperature: Number(temperatureElement.value),
 
         max_tokens: Number(maxTokensElement.value),
+        secret: getSecret(),
       }),
     });
 
@@ -281,7 +550,9 @@ async function sendMessage() {
         break;
       }
 
-      buffer += decoder.decode(result.value, { stream: true });
+      buffer += decoder.decode(result.value, {
+        stream: true,
+      });
 
       const events = buffer.split("\n\n");
 
@@ -301,8 +572,30 @@ async function sendMessage() {
             continue;
           }
 
-          // Go currently sends
-          // plain text in the data field.
+          // ==========================
+          // OPENROUTER REQUEST
+          // ==========================
+
+          if (data.startsWith("[OPENROUTER_REQUEST]")) {
+            handleOpenRouterRequestEvent(data);
+
+            continue;
+          }
+
+          // ==========================
+          // MEMORY
+          // ==========================
+
+          if (data.startsWith("[MEMORIES]")) {
+            handleMemoryEvent(data);
+
+            continue;
+          }
+
+          // ==========================
+          // ASSISTANT TEXT
+          // ==========================
+
           assistantMessage.content += data;
 
           renderMessages();
@@ -316,23 +609,6 @@ async function sendMessage() {
     updateDebug();
   } catch (error) {
     console.error("Chat error:", error);
-
-    // Remove empty assistant message.
-    if (
-      messages.length > 0 &&
-      messages[messages.length - 1].role === "assistant" &&
-      messages[messages.length - 1].content === ""
-    ) {
-      messages.pop();
-    }
-
-    messages.push({
-      role: "assistant",
-
-      content: `ERROR: ${error.message}`,
-    });
-
-    renderMessages();
   } finally {
     setLoading(false);
   }
@@ -355,18 +631,24 @@ function setLoading(loading) {
 function clearChat() {
   messages = [];
 
-  renderMessages();
+  memories = [];
 
-  loadAutomaticMemory().then(() => {
-    updateDebug();
-  });
+  renderMessages();
+  renderMemories();
+  updateDebug();
 }
 
 // ==============================
 // EVENT LISTENERS
 // ==============================
+
 saveChatButton.addEventListener("click", saveChat);
+
 loadChatButton.addEventListener("click", loadChat);
+
+addMemoryButton.addEventListener("click", () => {
+  addMemory("");
+});
 
 characterNameElement.addEventListener("input", () => {
   updateTitle();
@@ -376,17 +658,13 @@ characterNameElement.addEventListener("input", () => {
 
 characterPromptElement.addEventListener("input", updateDebug);
 
-behaviorPromptElement.addEventListener("input", updateDebug);
+userCharacterElement.addEventListener("input", updateDebug);
 
-memoryPromptElement.addEventListener("input", updateDebug);
-
-if (automaticMemoryElement) {
-  automaticMemoryElement.addEventListener("input", updateDebug);
-}
+nextInstructionsElement.addEventListener("input", updateDebug);
 
 contextBudgetElement.addEventListener("input", updateDebug);
 
-modelElement.addEventListener("input", updateDebug);
+modelElement.addEventListener("change", updateDebug);
 
 temperatureElement.addEventListener("input", updateDebug);
 
@@ -410,67 +688,63 @@ inputElement.addEventListener("keydown", (event) => {
     }
   }
 });
-async function loadAutomaticMemory() {
-  if (!automaticMemoryElement) {
-    return;
-  }
 
-  try {
-    const response = await fetch("/api/memory");
-
-    if (!response.ok) {
-      return;
-    }
-
-    const memories = await response.json();
-
-    automaticMemoryElement.value = memories
-      .map((memory) => `- ${memory.content}`)
-      .join("\n");
-  } catch (error) {
-    console.error("Failed to load automatic memory:", error);
-  }
-}
+// ==============================
+// SAVE CHAT
+// ==============================
 
 async function saveChat() {
   const name = chatNameElement.value.trim();
 
   if (!name) {
     alert("Please enter a chat name.");
+
     return;
   }
 
   if (messages.length === 0) {
     alert("There is nothing to save.");
+
     return;
   }
 
   saveChatButton.disabled = true;
+
   saveChatButton.textContent = "Saving...";
 
   try {
     const response = await fetch("/api/chats/save", {
       method: "POST",
+
       headers: {
         "Content-Type": "application/json",
       },
+
       body: JSON.stringify({
         name: name,
 
         data: {
           messages: messages,
 
+          memories: memories,
+
           character: {
             name: characterNameElement.value,
+
             prompt: characterPromptElement.value,
-            behavior: behaviorPromptElement.value,
-            importantMemory: memoryPromptElement.value,
+
+            userCharacter: userCharacterElement.value,
+
+            nextInstructions: nextInstructionsElement.value,
           },
 
           settings: {
             model: modelElement.value,
+
             temperature: Number(temperatureElement.value),
+
             maxTokens: Number(maxTokensElement.value),
+
             contextBudget: getContextBudget(),
           },
         },
@@ -479,20 +753,29 @@ async function saveChat() {
 
     if (!response.ok) {
       const error = await response.text();
+
       throw new Error(error || `HTTP ${response.status}`);
     }
 
     alert(`Chat "${name}" saved.`);
+
     await loadSavedChats();
+
     savedChatsElement.value = name;
   } catch (error) {
     console.error("Save chat error:", error);
+
     alert(`Failed to save chat: ${error.message}`);
   } finally {
     saveChatButton.disabled = false;
+
     saveChatButton.textContent = "Save Chat";
   }
 }
+
+// ==============================
+// LOAD SAVED CHATS
+// ==============================
 
 async function loadSavedChats() {
   try {
@@ -510,6 +793,7 @@ async function loadSavedChats() {
       const option = document.createElement("option");
 
       option.value = chat.name;
+
       option.textContent = `${chat.name} (${chat.updated_at})`;
 
       savedChatsElement.appendChild(option);
@@ -519,15 +803,21 @@ async function loadSavedChats() {
   }
 }
 
+// ==============================
+// LOAD CHAT
+// ==============================
+
 async function loadChat() {
   const name = savedChatsElement.value;
 
   if (!name) {
     alert("Please select a chat.");
+
     return;
   }
 
   loadChatButton.disabled = true;
+
   loadChatButton.textContent = "Loading...";
 
   try {
@@ -535,6 +825,7 @@ async function loadChat() {
 
     if (!response.ok) {
       const error = await response.text();
+
       throw new Error(error || `HTTP ${response.status}`);
     }
 
@@ -542,21 +833,38 @@ async function loadChat() {
 
     const data = result.data;
 
-    // Restore messages
+    // ==========================
+    // RESTORE MESSAGES
+    // ==========================
+
     messages = Array.isArray(data.messages) ? data.messages : [];
 
-    // Restore character
+    // ==========================
+    // RESTORE MEMORIES
+    // ==========================
+
+    memories = Array.isArray(data.memories)
+      ? data.memories.map(normalizeMemory)
+      : [];
+
+    // ==========================
+    // RESTORE CHARACTER
+    // ==========================
+
     if (data.character) {
       characterNameElement.value = data.character.name || "";
 
       characterPromptElement.value = data.character.prompt || "";
 
-      behaviorPromptElement.value = data.character.behavior || "";
+      userCharacterElement.value = data.character.userCharacter || "";
 
-      memoryPromptElement.value = data.character.importantMemory || "";
+      nextInstructionsElement.value = data.character.nextInstructions || "";
     }
 
-    // Restore settings
+    // ==========================
+    // RESTORE SETTINGS
+    // ==========================
+
     if (data.settings) {
       if (data.settings.model !== undefined) {
         modelElement.value = data.settings.model;
@@ -575,22 +883,25 @@ async function loadChat() {
       }
     }
 
-    // Restore chat name
+    // ==========================
+    // RESTORE CHAT NAME
+    // ==========================
+
     chatNameElement.value = result.name;
 
     updateTitle();
     renderMessages();
-
-    await loadAutomaticMemory();
-
+    renderMemories();
     updateDebug();
 
     alert(`Chat "${result.name}" loaded.`);
   } catch (error) {
     console.error("Load chat error:", error);
+
     alert(`Failed to load chat: ${error.message}`);
   } finally {
     loadChatButton.disabled = false;
+
     loadChatButton.textContent = "Load Chat";
   }
 }
@@ -600,8 +911,11 @@ async function loadChat() {
 // ==============================
 
 updateTitle();
+
 renderMessages();
 
-Promise.all([loadAutomaticMemory(), loadSavedChats()]).then(() => {
+renderMemories();
+
+loadSavedChats().then(() => {
   updateDebug();
 });

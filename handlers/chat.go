@@ -29,6 +29,10 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 			http.Error(w, "invalid JSON", http.StatusBadRequest)
 			return
 		}
+		if req.Secret != "haha" {
+			http.Error(w, "invalid secret", http.StatusBadRequest)
+			return
+		}
 
 		// Defaults
 		if req.Model == "" {
@@ -47,10 +51,19 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 			req.ContextBudget = 5000
 		}
 
-		// Build context
+		// Build context.
+		//
+		// IMPORTANT:
+		// req.Memories comes from the browser/chat state.
+		// The server no longer owns the memory list.
 		messages := context_v1.BuildContextV3(req)
 
-		log.Printf("context: messages=%d budget=%d max_output=%d", len(messages), req.ContextBudget, req.MaxTokens)
+		log.Printf(
+			"context: messages=%d budget=%d max_output=%d",
+			len(messages),
+			req.ContextBudget,
+			req.MaxTokens,
+		)
 
 		// OpenRouter request
 		openRouterReq := map[string]any{
@@ -63,7 +76,11 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 
 		body, err := json.Marshal(openRouterReq)
 		if err != nil {
-			http.Error(w, "failed to encode request", http.StatusInternalServerError)
+			http.Error(
+				w,
+				"failed to encode request",
+				http.StatusInternalServerError,
+			)
 			return
 		}
 
@@ -73,10 +90,12 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 			bytes.NewReader(body),
 		)
 
-		log.Println("body ", string(body))
-
 		if err != nil {
-			http.Error(w, "failed to create request", http.StatusInternalServerError)
+			http.Error(
+				w,
+				"failed to create request",
+				http.StatusInternalServerError,
+			)
 			return
 		}
 
@@ -86,11 +105,79 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 		httpReq.Header.Set("HTTP-Referer", "http://localhost:8080")
 		httpReq.Header.Set("X-Title", "My Character Chat")
 
+		// =========================================
+		// SSE RESPONSE
+		// =========================================
+
+		w.Header().Set(
+			"Content-Type",
+			"text/event-stream",
+		)
+
+		w.Header().Set(
+			"Cache-Control",
+			"no-cache",
+		)
+
+		w.Header().Set(
+			"Connection",
+			"keep-alive",
+		)
+
+		flusher, ok := w.(http.Flusher)
+
+		if !ok {
+			http.Error(
+				w,
+				"streaming not supported",
+				http.StatusInternalServerError,
+			)
+
+			return
+		}
+
+		// Flush headers immediately.
+		flusher.Flush()
+
+		// =========================================
+		// OPENROUTER REQUEST SSE
+		// =========================================
+		//
+		// Send the EXACT JSON body that is about to
+		// be sent to OpenRouter.
+		//
+		// This is what Prompt Inspector displays.
+		sendOpenRouterRequestEvent(
+			w,
+			flusher,
+			body,
+		)
+
+		// =========================================
+		// SEND REQUEST TO OPENROUTER
+		// =========================================
+
 		resp, err := http.DefaultClient.Do(httpReq)
 
 		if err != nil {
-			log.Printf("OpenRouter connection error: %v", err)
-			http.Error(w, fmt.Sprintf("OpenRouter connection failed: %v", err), http.StatusBadGateway)
+			log.Printf(
+				"OpenRouter connection error: %v",
+				err,
+			)
+
+			fmt.Fprintf(
+				w,
+				"data: OpenRouter connection failed: %v\n\n",
+				err,
+			)
+
+			fmt.Fprint(
+				w,
+				"data: [DONE]\n\n",
+			)
+
+			flusher.Flush()
+
 			return
 		}
 
@@ -105,7 +192,9 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 				} `json:"error"`
 			}
 
-			if err := json.NewDecoder(resp.Body).Decode(&errorResponse); err == nil {
+			if err := json.NewDecoder(resp.Body).Decode(
+				&errorResponse,
+			); err == nil {
 				if errorResponse.Error.Message != "" {
 					log.Printf(
 						"OpenRouter error: status=%d code=%d message=%s",
@@ -114,35 +203,47 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 						errorResponse.Error.Message,
 					)
 
-					http.Error(w, errorResponse.Error.Message, http.StatusBadGateway)
+					fmt.Fprintf(
+						w,
+						"data: OpenRouter error: %s\n\n",
+						errorResponse.Error.Message,
+					)
+
+					fmt.Fprint(
+						w,
+						"data: [DONE]\n\n",
+					)
+
+					flusher.Flush()
+
 					return
 				}
 			}
 
-			http.Error(w, fmt.Sprintf("OpenRouter returned HTTP %d", resp.StatusCode), http.StatusBadGateway)
+			fmt.Fprintf(
+				w,
+				"data: OpenRouter returned HTTP %d\n\n",
+				resp.StatusCode,
+			)
+
+			fmt.Fprint(
+				w,
+				"data: [DONE]\n\n",
+			)
+
+			flusher.Flush()
+
 			return
 		}
 
-		// SSE response
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Header().Set("Connection", "keep-alive")
-
-		flusher, ok := w.(http.Flusher)
-
-		if !ok {
-			http.Error(w, "streaming not supported", http.StatusInternalServerError)
-			return
-		}
-
-		// Flush headers immediately
-		flusher.Flush()
-
-		// Read OpenRouter stream
+		// Read OpenRouter stream.
 		var assistantContent strings.Builder
 
 		scanner := bufio.NewScanner(resp.Body)
-		scanner.Buffer(make([]byte, 4096), 1024*1024)
+		scanner.Buffer(
+			make([]byte, 4096),
+			1024*1024,
+		)
 
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -151,16 +252,17 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 				continue
 			}
 
-			data := strings.TrimPrefix(line, "data: ")
+			data := strings.TrimPrefix(
+				line,
+				"data: ",
+			)
 
 			// Done
 			if data == "[DONE]" {
-				fmt.Fprint(w, "data: [DONE]\n\n")
-				flusher.Flush()
 				break
 			}
 
-			// Parse chunk
+			// Parse chunk.
 			var chunk struct {
 				Choices []struct {
 					Delta struct {
@@ -169,7 +271,10 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 				} `json:"choices"`
 			}
 
-			if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+			if err := json.Unmarshal(
+				[]byte(data),
+				&chunk,
+			); err != nil {
 				continue
 			}
 
@@ -185,25 +290,36 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 
 			assistantContent.WriteString(content)
 
-			// Send plain text SSE to browser
-			fmt.Fprintf(w, "data: %s\n\n", content)
+			// Send plain text SSE to browser.
+			fmt.Fprintf(
+				w,
+				"data: %s\n\n",
+				content,
+			)
+
 			flusher.Flush()
 		}
 
 		if err := scanner.Err(); err != nil {
-			log.Printf("OpenRouter stream error: %v", err)
+			log.Printf(
+				"OpenRouter stream error: %v",
+				err,
+			)
+
 			return
 		}
 
-		// Complete assistant response
-		assistantText := strings.TrimSpace(assistantContent.String())
+		// Complete assistant response.
+		assistantText := strings.TrimSpace(
+			assistantContent.String(),
+		)
 
 		if assistantText == "" {
 			log.Println("nothing for assistant text")
 			return
 		}
 
-		// Full conversation
+		// Full conversation.
 		//
 		// IMPORTANT:
 		// This is the original conversation, not the
@@ -211,61 +327,167 @@ func ChatHandler(apiKey string) http.HandlerFunc {
 		//
 		// The summary system needs the real messages
 		// so it can progressively compress old history.
-		conversation := make([]models.Message, 0, len(req.Messages)+1)
+		conversation := make(
+			[]models.Message,
+			0,
+			len(req.Messages)+1,
+		)
 
-		conversation = append(conversation, req.Messages...)
+		conversation = append(
+			conversation,
+			req.Messages...,
+		)
 
-		conversation = append(conversation, models.Message{
-			Role:    "assistant",
-			Content: assistantText,
-		})
+		conversation = append(
+			conversation,
+			models.Message{
+				Role:    "assistant",
+				Content: assistantText,
+			},
+		)
 
-		// Automatic memory
-		maybeExtractMemories(apiKey, conversation)
+		// Automatic memory.
+		//
+		// Newly extracted memories are returned to the browser
+		// instead of being stored in server-global state.
+		newMemories := maybeExtractMemories(
+			apiKey,
+			conversation,
+			req.Memories,
+		)
 
-		// Rolling summary
-		UpdateRollingSummary(apiKey, conversation)
+		if len(newMemories) > 0 {
+			sendMemoryEvent(
+				w,
+				flusher,
+				newMemories,
+			)
+		}
+
+		// Rolling summary.
+		UpdateRollingSummary(
+			apiKey,
+			conversation,
+		)
+
+		// Signal the end of our SSE stream.
+		fmt.Fprint(
+			w,
+			"data: [DONE]\n\n",
+		)
+
+		flusher.Flush()
 	}
 }
 
+// =========================================
 // AUTOMATIC MEMORY
+// =========================================
 
-func maybeExtractMemories(apiKey string, messages []models.Message) {
+func maybeExtractMemories(
+	apiKey string,
+	messages []models.Message,
+	existingMemories []models.Memory,
+) []models.Memory {
 	count := Memory.IncrementRequestCount()
 
 	if count < Memory.MemoryExtractionInterval {
-		return
+		return nil
 	}
 
-	extractionMessages := Memory.GetMessagesForExtraction(messages)
+	extractionMessages := Memory.GetMessagesForExtraction(
+		messages,
+	)
 
 	if len(extractionMessages) == 0 {
-		log.Println("memory extraction: no new messages to extract")
-		return
-	}
+		log.Println(
+			"memory extraction: no new messages to extract",
+		)
 
-	state := Memory.GetConversationState()
+		return nil
+	}
 
 	newMemories, err := Memory.ExtractMemories(
 		apiKey,
 		extractionMessages,
-		state.Memories,
+		existingMemories,
 	)
 
 	if err != nil {
-		log.Println("memory extraction error:", err)
-		Memory.ResetRequestCount()
-		return
+		log.Println(
+			"memory extraction error:",
+			err,
+		)
+		return nil
 	}
 
 	if len(newMemories) > 0 {
-		Memory.AddMemories(newMemories)
+		log.Printf(
+			"memory extraction: found %d memories",
+			len(newMemories),
+		)
 
-		log.Printf("memory extraction: added %d memories", len(newMemories))
-		log.Printf("new memory: %v", newMemories)
+		log.Printf(
+			"new memory: %v",
+			newMemories,
+		)
 	} else {
-		log.Println("memory extraction: no new memories")
+		log.Println(
+			"memory extraction: no new memories",
+		)
 	}
 
-	Memory.MarkMessagesExtracted(len(messages))
+	Memory.MarkMessagesExtracted(
+		len(messages),
+	)
+
+	// enable by default memory
+	for i := range newMemories {
+		newMemories[i].Enabled = true
+	}
+	return newMemories
+}
+
+// =========================================
+// OPENROUTER REQUEST SSE EVENT
+// =========================================
+
+func sendOpenRouterRequestEvent(w http.ResponseWriter, flusher http.Flusher, body []byte) {
+	fmt.Fprintf(
+		w,
+		"data: [OPENROUTER_REQUEST]%s\n\n",
+		body,
+	)
+
+	flusher.Flush()
+}
+
+// =========================================
+// MEMORY SSE EVENT
+// =========================================
+
+func sendMemoryEvent(w http.ResponseWriter,
+	flusher http.Flusher,
+	memories []models.Memory,
+) {
+	payload, err := json.Marshal(memories)
+
+	if err != nil {
+		log.Println(
+			"failed to encode memory SSE event:",
+			err,
+		)
+
+		return
+	}
+
+	// Prefix the payload so the browser can distinguish
+	// memory events from normal assistant text.
+	fmt.Fprintf(
+		w,
+		"data: [MEMORIES]%s\n\n",
+		payload,
+	)
+
+	flusher.Flush()
 }

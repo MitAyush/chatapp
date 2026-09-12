@@ -28,7 +28,6 @@ func main() {
 
 	http.HandleFunc("/", handlers.ServeIndex)
 	http.HandleFunc("/api/chat", handlers.ChatHandler(apiKey))
-	http.HandleFunc("/api/memory", handlers.MemoryHandler)
 	http.HandleFunc("/api/chats/save", handlers.SaveChatHandler)
 	http.HandleFunc("/api/chats", handlers.ListChatsHandler)
 	http.HandleFunc("/api/chats/", handlers.LoadChatHandler)

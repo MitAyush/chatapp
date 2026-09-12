@@ -1,16 +1,25 @@
 package models
 
 type ChatRequest struct {
-	Model                string    `json:"model"`
-	Messages             []Message `json:"messages"`
-	CharacterDefinition  string    `json:"character_definition"`
-	BehaviorInstructions string    `json:"behavior_instructions"`
-	ImportantMemory      string    `json:"important_memory"`
+	Model    string    `json:"model"`
+	Messages []Message `json:"messages"`
+	Memories []Memory  `json:"memories"`
+
+	// AI character provided by the frontend.
+	CharacterDefinition string `json:"character_definition"`
+
+	// User character provided by the frontend.
+	UserCharacter string `json:"user_character"`
+
+	// Current instructions provided by the frontend.
+	// These have the highest priority in the context prompt.
+	NextInstructions string `json:"next_instructions"`
 
 	ContextBudget int `json:"context_budget"`
 
 	Temperature float64 `json:"temperature"`
 	MaxTokens   int     `json:"max_tokens"`
+	Secret      string  `json:"secret"`
 }
 
 type Message struct {
@@ -20,7 +29,6 @@ type Message struct {
 
 type ConversationState struct {
 	Summary                 string
-	Memories                []Memory
 	RequestsSinceExtraction int
 
 	LastExtractedMessage  int
@@ -28,8 +36,10 @@ type ConversationState struct {
 }
 
 type Memory struct {
+	ID         string `json:"id"`
 	Content    string `json:"content"`
 	Importance int    `json:"importance"`
+	Enabled    bool   `json:"enabled"`
 }
 
 // ContextResult contains the final context sent to the model

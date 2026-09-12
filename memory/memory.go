@@ -7,7 +7,7 @@ import (
 	"github.com/MitAyush/chatapp/models"
 )
 
-const MemoryExtractionInterval = 3 // for experiment
+const MemoryExtractionInterval = 12 // for experiment
 
 var (
 	conversationState models.ConversationState
@@ -32,7 +32,8 @@ func GetConversationState() models.ConversationState {
 // ResetConversationState completely clears the
 // in-memory conversation state.
 //
-// Call this when starting a new chat.
+// This currently resets extraction and summary bookkeeping.
+// Memories themselves are owned by the browser/chat state.
 func ResetConversationState() {
 	memoryMu.Lock()
 	defer memoryMu.Unlock()
@@ -49,6 +50,7 @@ func IncrementRequestCount() int {
 	defer memoryMu.Unlock()
 
 	conversationState.RequestsSinceExtraction++
+
 	return conversationState.RequestsSinceExtraction
 }
 
@@ -57,33 +59,6 @@ func ResetRequestCount() {
 	defer memoryMu.Unlock()
 
 	conversationState.RequestsSinceExtraction = 0
-}
-
-// -----------------------------------------
-// MEMORIES
-// -----------------------------------------
-
-func AddMemories(memories []models.Memory) {
-	memoryMu.Lock()
-	defer memoryMu.Unlock()
-
-	for _, memory := range memories {
-		if strings.TrimSpace(memory.Content) == "" {
-			continue
-		}
-
-		conversationState.Memories = append(conversationState.Memories, memory)
-	}
-}
-
-func GetMemories() []models.Memory {
-	memoryMu.RLock()
-	defer memoryMu.RUnlock()
-
-	memories := make([]models.Memory, len(conversationState.Memories))
-	copy(memories, conversationState.Memories)
-
-	return memories
 }
 
 // -----------------------------------------

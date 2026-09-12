@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/MitAyush/chatapp/constants"
 	"github.com/MitAyush/chatapp/models"
 )
 
@@ -24,7 +25,7 @@ func ExtractMemories(
 	prompt := BuildMemoryExtractionPrompt(messages, existingMemories)
 
 	requestBody := map[string]any{
-		"model": "nousresearch/hermes-3-llama-3.1-70b",
+		"model": constants.ModelName,
 		"messages": []models.Message{
 			{
 				Role:    "user",

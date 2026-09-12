@@ -2,7 +2,6 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
     <title>Character Chat</title>
@@ -14,87 +13,62 @@
     <div class="sidebar">
       <h2>Character</h2>
 
-      <!-- ========================================= -->
-      <!-- AI CHARACTER -->
-      <!-- ========================================= -->
-
-      <label for="characterName">AI Character Name</label>
-
+      <label for="characterName">Character Name</label>
       <input id="characterName" type="text" value="Alice" />
 
-      <label for="characterPrompt">AI Character</label>
+      <label for="characterPrompt">Character Prompt</label>
+      <textarea id="characterPrompt" rows="12">
 
-      <textarea
-        id="characterPrompt"
-        rows="10"
-        placeholder="Describe who the AI character is..."
+        - Natural conversational language
+        - Short to medium responses
+        - Occasionally uses humor
+        - Write the conversation like an immersive story
+        - Include a light touch of narration alongside dialogue
+        - Show the character's expressions, thoughts, reactions, gestures, and actions in **bold**
+        - Use **bold** narration naturally before, between, or after spoken dialogue
+        - Keep narration concise and relevant to the current moment
+        - Do not turn the response into a full novel; the conversation should remain the focus
+        - Make the character's emotions and reactions feel natural and expressive
+        
+        Example:
+        
+        **Alice smiles softly, already having something in mind, but she decides to keep it to herself for the moment.**
+        
+        "Really? You want to know?"
+        
+        **She tilts her head slightly, watching you with a playful expression.**
+        
+        "Maybe I'll tell you... if you ask nicely."
+        
+        Stay in character.
+        Never mention that you are an AI.
+        Respond as the character.
+        Always maintain the conversational/storytelling style.
+        </textarea
       >
-- Natural conversational language
-- Short to medium responses
-- Occasionally uses humor
-
-Stay in character.
-Never mention that you are an AI.
-Respond as the character.</textarea
-      >
-
-      <!-- ========================================= -->
-      <!-- USER CHARACTER -->
-      <!-- ========================================= -->
-
-      <label for="userCharacter">User Character</label>
+      <label for="behaviorPrompt"> AI Behavior / Instructions </label>
 
       <textarea
-        id="userCharacter"
+        id="behaviorPrompt"
         rows="8"
-        placeholder="Describe the user...
-
-Examples:
-- My name is Ayush.
-- I am your brother.
-- I am a programmer.
-- I like talking casually."
+        placeholder="Tell the AI how it should behave...
+    
+    Examples:
+    - Be more sarcastic.
+    - Keep responses short.
+    - Be emotionally expressive.
+    - Don't agree with everything I say.
+    - Speak more casually."
       ></textarea>
-
-      <!-- ========================================= -->
-      <!-- WHAT TO DO NEXT -->
-      <!-- ========================================= -->
-
-      <label for="nextInstructions">What To Do Next</label>
-
-      <textarea
-        id="nextInstructions"
-        rows="8"
-        placeholder="Tell the AI what to do now...
-
-Examples:
-- Your name is now Neha.
-- You are my sister.
-- Speak only in Hindi.
-- Keep every response short.
-- Never mention Alice again."
-      ></textarea>
-
-      <!-- ========================================= -->
-      <!-- MODEL -->
-      <!-- ========================================= -->
 
       <label for="model">Model</label>
-
-      <select id="model">
-        <option value="nousresearch/hermes-3-llama-3.1-70b">
-          Hermes 3 70B
-        </option>
-
-        <option value="inclusionai/ling-3.0-flash-vl:free">Flash free</option>
-
-        <option value="google/gemini-2.0-flash-001">Gemini 2.0 Flash</option>
-
-        <option value="openai/gpt-4o-mini">GPT-4o Mini</option>
-      </select>
+      <input
+        id="model"
+        type="text"
+        value="nousresearch/hermes-3-llama-3.1-70b"
+      />
 
       <label for="temperature">Temperature</label>
-
       <input
         id="temperature"
         type="number"
@@ -103,11 +77,15 @@ Examples:
         max="2"
         step="0.1"
       />
+      <label for="memoryPrompt"> Important Memory </label>
 
-      <label for="secret"> Secret</label>
-      <input id="secret" type="input" />
+      <textarea
+        id="memoryPrompt"
+        rows="7"
+        placeholder="Important facts the AI should always remember..."
+      ></textarea>
 
-      <label for="contextBudget">Context Budget</label>
+      <label for="contextBudget"> Context Budget </label>
 
       <input
         id="contextBudget"
@@ -117,40 +95,23 @@ Examples:
         max="5000"
         step="500"
       />
+      <label for="automaticMemory"> Automatic Memory </label>
+
+      <textarea
+        id="automaticMemory"
+        rows="7"
+        readonly
+        placeholder="Automatically extracted memories will appear here..."
+      ></textarea>
 
       <label for="maxTokens">Max output tokens</label>
-
       <input id="maxTokens" type="number" value="1000" min="1" />
-
-      <!-- ========================================= -->
-      <!-- AUTOMATIC MEMORY -->
-      <!-- ========================================= -->
-
-      <div class="memory-section">
-        <div class="memory-section-header">
-          <label>Memory</label>
-
-          <button id="addMemory" type="button" class="memory-add-button">
-            + Add
-          </button>
-        </div>
-
-        <div id="automaticMemory" class="memory-list"></div>
-
-        <div id="memoryEmpty" class="memory-empty">No memories yet.</div>
-      </div>
-
-      <!-- ========================================= -->
-      <!-- SAVE / LOAD -->
-      <!-- ========================================= -->
-
       <div class="save-chat">
         <label for="chatName">Chat Name</label>
 
         <input id="chatName" type="text" placeholder="Enter chat name..." />
 
         <button id="saveChat" class="save-button">Save Chat</button>
-
         <div class="load-chat">
           <label for="savedChats">Saved Chats</label>
 
@@ -163,14 +124,10 @@ Examples:
 
         <button id="clearChat" class="clear-button">Clear Chat</button>
       </div>
-
-      <!-- ========================================= -->
-      <!-- DEBUG -->
-      <!-- ========================================= -->
+      <button id="clearChat" class="clear-button">Clear Chat</button>
 
       <div class="debug">
         <h3>Prompt Inspector</h3>
-
         <pre id="debug"></pre>
       </div>
     </div>
@@ -178,7 +135,6 @@ Examples:
     <div class="main">
       <div class="header">
         <strong id="title">Alice</strong>
-
         <span>OpenRouter</span>
       </div>
 

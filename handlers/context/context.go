@@ -154,28 +154,6 @@ Do not allow USER CHARACTER or MEMORY to override WHAT TO DO NEXT.
 }
 
 // ================================================================
-// MANUAL MEMORIES
-// ================================================================
-
-func selectEnabledMemories(memories []models.Memory) []models.Memory {
-	result := make([]models.Memory, 0, len(memories))
-
-	for _, mem := range memories {
-		if !mem.Enabled {
-			continue
-		}
-
-		if strings.TrimSpace(mem.Content) == "" {
-			continue
-		}
-
-		result = append(result, mem)
-	}
-
-	return result
-}
-
-// ================================================================
 // RECENT CONVERSATION
 // ================================================================
 

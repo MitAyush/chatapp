@@ -2,6 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
     <title>Character Chat</title>
@@ -13,7 +14,12 @@
     <div class="sidebar">
       <h2>Character</h2>
 
-      <label for="characterName">Character Name</label>
+      <!-- ========================================= -->
+      <!-- AI CHARACTER -->
+      <!-- ========================================= -->
+
+      <label for="characterName">AI Character Name</label>
+
       <input id="characterName" type="text" value="Alice" />
 
       <label for="characterPrompt">AI Character</label>
@@ -72,26 +78,38 @@ Examples:
       <label for="nextInstructions">What To Do Next</label>
 
       <textarea
-        id="behaviorPrompt"
+        id="nextInstructions"
         rows="8"
-        placeholder="Tell the AI how it should behave...
-    
-    Examples:
-    - Be more sarcastic.
-    - Keep responses short.
-    - Be emotionally expressive.
-    - Don't agree with everything I say.
-    - Speak more casually."
+        placeholder="Tell the AI what to do now...
+
+Examples:
+- Your name is now Neha.
+- You are my sister.
+- Speak only in Hindi.
+- Keep every response short.
+- Never mention Alice again."
       ></textarea>
 
+      <!-- ========================================= -->
+      <!-- MODEL -->
+      <!-- ========================================= -->
+
       <label for="model">Model</label>
-      <input
-        id="model"
-        type="text"
-        value="nousresearch/hermes-3-llama-3.1-70b"
-      />
+
+      <select id="model">
+        <option value="nousresearch/hermes-3-llama-3.1-70b">
+          Hermes 3 70B
+        </option>
+
+        <option value="inclusionai/ling-3.0-flash-vl:free">Flash free</option>
+
+        <option value="google/gemini-2.0-flash-001">Gemini 2.0 Flash</option>
+
+        <option value="openai/gpt-4o-mini">GPT-4o Mini</option>
+      </select>
 
       <label for="temperature">Temperature</label>
+
       <input
         id="temperature"
         type="number"
@@ -100,15 +118,11 @@ Examples:
         max="2"
         step="0.1"
       />
-      <label for="memoryPrompt"> Important Memory </label>
 
-      <textarea
-        id="memoryPrompt"
-        rows="7"
-        placeholder="Important facts the AI should always remember..."
-      ></textarea>
+      <label for="secret"> Secret</label>
+      <input id="secret" type="input" />
 
-      <label for="contextBudget"> Context Budget </label>
+      <label for="contextBudget">Context Budget</label>
 
       <input
         id="contextBudget"
@@ -118,23 +132,40 @@ Examples:
         max="5000"
         step="500"
       />
-      <label for="automaticMemory"> Automatic Memory </label>
-
-      <textarea
-        id="automaticMemory"
-        rows="7"
-        readonly
-        placeholder="Automatically extracted memories will appear here..."
-      ></textarea>
 
       <label for="maxTokens">Max output tokens</label>
+
       <input id="maxTokens" type="number" value="1000" min="1" />
+
+      <!-- ========================================= -->
+      <!-- AUTOMATIC MEMORY -->
+      <!-- ========================================= -->
+
+      <div class="memory-section">
+        <div class="memory-section-header">
+          <label>Memory</label>
+
+          <button id="addMemory" type="button" class="memory-add-button">
+            + Add
+          </button>
+        </div>
+
+        <div id="automaticMemory" class="memory-list"></div>
+
+        <div id="memoryEmpty" class="memory-empty">No memories yet.</div>
+      </div>
+
+      <!-- ========================================= -->
+      <!-- SAVE / LOAD -->
+      <!-- ========================================= -->
+
       <div class="save-chat">
         <label for="chatName">Chat Name</label>
 
         <input id="chatName" type="text" placeholder="Enter chat name..." />
 
         <button id="saveChat" class="save-button">Save Chat</button>
+
         <div class="load-chat">
           <label for="savedChats">Saved Chats</label>
 
@@ -147,10 +178,14 @@ Examples:
 
         <button id="clearChat" class="clear-button">Clear Chat</button>
       </div>
-      <button id="clearChat" class="clear-button">Clear Chat</button>
+
+      <!-- ========================================= -->
+      <!-- DEBUG -->
+      <!-- ========================================= -->
 
       <div class="debug">
         <h3>Prompt Inspector</h3>
+
         <pre id="debug"></pre>
       </div>
     </div>
@@ -158,6 +193,7 @@ Examples:
     <div class="main">
       <div class="header">
         <strong id="title">Alice</strong>
+
         <span>OpenRouter</span>
       </div>
 

@@ -1,12 +1,9 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
     <title>Character Chat</title>
-
     <link rel="stylesheet" href="style.css" />
   </head>
 
@@ -14,55 +11,43 @@
     <div class="sidebar">
       <h2>Character</h2>
 
-      <!-- ========================================= -->
-      <!-- AI CHARACTER -->
-      <!-- ========================================= -->
-
       <label for="characterName">AI Character Name</label>
-
       <input id="characterName" type="text" value="Alice" />
 
       <label for="characterPrompt">AI Character</label>
-
       <textarea id="characterPrompt" rows="12">
+- Natural conversational language
+- Keep Short responses
+- Occasionally uses humor
+- Write the conversation like an immersive story
+- Include a light touch of narration alongside dialogue
+- Show the character's expressions, thoughts, reactions, gestures, and actions in **bold**
+- Use **bold** narration naturally before, between, or after spoken dialogue
+- Keep narration concise and relevant to the current moment
+- Do not turn the response into a full novel; the conversation should remain the focus
+- Make the character's emotions and reactions feel natural and expressive
 
-        - Natural conversational language
-        - Short to medium responses
-        - Occasionally uses humor
-        - Write the conversation like an immersive story
-        - Include a light touch of narration alongside dialogue
-        - Show the character's expressions, thoughts, reactions, gestures, and actions in **bold**
-        - Use **bold** narration naturally before, between, or after spoken dialogue
-        - Keep narration concise and relevant to the current moment
-        - Do not turn the response into a full novel; the conversation should remain the focus
-        - Make the character's emotions and reactions feel natural and expressive
-        
-        Example:
-        
-        **Alice smiles softly, already having something in mind, but she decides to keep it to herself for the moment.**
-        
-        "Really? You want to know?"
-        
-        **She tilts her head slightly, watching you with a playful expression.**
-        
-        "Maybe I'll tell you... if you ask nicely."
-        
-        Stay in character.
-        Never mention that you are an AI.
-        Respond as the character.
-        Always maintain the conversational/storytelling style.
-        </textarea
+Example:
+
+**Alice smiles softly, already having something in mind, but she decides to keep it to herself for the moment.**
+
+"Really? You want to know?"
+
+**She tilts her head slightly, watching you with a playful expression.**
+
+"Maybe I'll tell you... if you ask nicely."
+
+Stay in character.
+Never mention that you are an AI.
+Respond as the character.
+Always maintain the conversational/storytelling style.
+    </textarea
       >
 
-      <!-- ========================================= -->
-      <!-- USER CHARACTER -->
-      <!-- ========================================= -->
-
       <label for="userCharacter">User Character</label>
-
       <textarea
         id="userCharacter"
-        rows="8"
+        rows="5"
         placeholder="Describe the user...
 Examples:
 - My name is Ayush.
@@ -71,45 +56,20 @@ Examples:
 - I like talking casually."
       ></textarea>
 
-      <!-- ========================================= -->
-      <!-- WHAT TO DO NEXT -->
-      <!-- ========================================= -->
-
       <label for="nextInstructions">What To Do Next</label>
-
-      <textarea
-        id="nextInstructions"
-        rows="8"
-        placeholder="Tell the AI what to do now...
-
-Examples:
-- Your name is now Neha.
-- You are my sister.
-- Speak only in Hindi.
-- Keep every response short.
-- Never mention Alice again."
-      ></textarea>
-
-      <!-- ========================================= -->
-      <!-- MODEL -->
-      <!-- ========================================= -->
+      <input id="nextInstructions" type="text" />
 
       <label for="model">Model</label>
-
       <select id="model">
         <option value="nousresearch/hermes-3-llama-3.1-70b">
           Hermes 3 70B
         </option>
-
         <option value="inclusionai/ling-3.0-flash-vl:free">Flash free</option>
-
         <option value="google/gemini-2.0-flash-001">Gemini 2.0 Flash</option>
-
         <option value="openai/gpt-4o-mini">GPT-4o Mini</option>
       </select>
 
       <label for="temperature">Temperature</label>
-
       <input
         id="temperature"
         type="number"
@@ -119,11 +79,10 @@ Examples:
         step="0.1"
       />
 
-      <label for="secret"> Secret</label>
-      <input id="secret" type="input" />
+      <label for="secret">Secret</label>
+      <input id="secret" type="text" />
 
       <label for="contextBudget">Context Budget</label>
-
       <input
         id="contextBudget"
         type="number"
@@ -134,34 +93,29 @@ Examples:
       />
 
       <label for="maxTokens">Max output tokens</label>
-
       <input id="maxTokens" type="number" value="1000" min="1" />
 
-      <!-- ========================================= -->
-      <!-- AUTOMATIC MEMORY -->
-      <!-- ========================================= -->
-
-      <div class="memory-section">
-        <div class="memory-section-header">
-          <label>Memory</label>
-
-          <button id="addMemory" type="button" class="memory-add-button">
-            + Add
+      <div class="rolling-memory-section">
+        <div class="rolling-memory-header">
+          <label for="rollingMemory">Rolling Memory</label>
+          <button
+            id="clearRollingMemory"
+            type="button"
+            class="memory-delete-button"
+          >
+            Clear
           </button>
         </div>
 
-        <div id="automaticMemory" class="memory-list"></div>
-
-        <div id="memoryEmpty" class="memory-empty">No memories yet.</div>
+        <textarea
+          id="rollingMemory"
+          rows="12"
+          placeholder="Backend-generated rolling memory will appear here..."
+        ></textarea>
       </div>
-
-      <!-- ========================================= -->
-      <!-- SAVE / LOAD -->
-      <!-- ========================================= -->
 
       <div class="save-chat">
         <label for="chatName">Chat Name</label>
-
         <input id="chatName" type="text" placeholder="Enter chat name..." />
 
         <button id="saveChat" class="save-button">Save Chat</button>
@@ -179,13 +133,8 @@ Examples:
         <button id="clearChat" class="clear-button">Clear Chat</button>
       </div>
 
-      <!-- ========================================= -->
-      <!-- DEBUG -->
-      <!-- ========================================= -->
-
       <div class="debug">
         <h3>Prompt Inspector</h3>
-
         <pre id="debug"></pre>
       </div>
     </div>
@@ -193,7 +142,6 @@ Examples:
     <div class="main">
       <div class="header">
         <strong id="title">Alice</strong>
-
         <span>OpenRouter</span>
       </div>
 
@@ -201,7 +149,6 @@ Examples:
 
       <div class="input-area">
         <textarea id="input" placeholder="Type a message..."></textarea>
-
         <button id="send" class="send">Send</button>
       </div>
     </div>

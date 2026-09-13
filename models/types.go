@@ -3,17 +3,17 @@ package models
 type ChatRequest struct {
 	Model    string    `json:"model"`
 	Messages []Message `json:"messages"`
-	Memories []Memory  `json:"memories"`
 
-	// AI character provided by the frontend.
 	CharacterDefinition string `json:"character_definition"`
+	UserCharacter       string `json:"user_character"`
+	NextInstructions    string `json:"next_instructions"`
 
-	// User character provided by the frontend.
-	UserCharacter string `json:"user_character"`
-
-	// Current instructions provided by the frontend.
-	// These have the highest priority in the context prompt.
-	NextInstructions string `json:"next_instructions"`
+	// Rolling conversation memory.
+	//
+	// nil  = frontend did not provide rolling memory
+	// ""   = frontend intentionally cleared rolling memory
+	// text = frontend provided/edited rolling memory
+	RollingMemory *string `json:"rolling_memory"`
 
 	ContextBudget int `json:"context_budget"`
 
@@ -28,11 +28,7 @@ type Message struct {
 }
 
 type ConversationState struct {
-	Summary                 string
-	RequestsSinceExtraction int
-
-	LastExtractedMessage  int
-	LastSummarizedMessage int
+	RequestsSinceSummary int
 }
 
 type Memory struct {

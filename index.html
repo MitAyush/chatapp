@@ -16,7 +16,8 @@
       <label for="characterName">Character Name</label>
       <input id="characterName" type="text" value="Alice" />
 
-      <label for="characterPrompt">Character Prompt</label>
+      <label for="characterPrompt">AI Character</label>
+
       <textarea id="characterPrompt" rows="12">
 
         - Natural conversational language
@@ -46,7 +47,29 @@
         Always maintain the conversational/storytelling style.
         </textarea
       >
-      <label for="behaviorPrompt"> AI Behavior / Instructions </label>
+
+      <!-- ========================================= -->
+      <!-- USER CHARACTER -->
+      <!-- ========================================= -->
+
+      <label for="userCharacter">User Character</label>
+
+      <textarea
+        id="userCharacter"
+        rows="8"
+        placeholder="Describe the user...
+Examples:
+- My name is Ayush.
+- I am your brother.
+- I am a programmer.
+- I like talking casually."
+      ></textarea>
+
+      <!-- ========================================= -->
+      <!-- WHAT TO DO NEXT -->
+      <!-- ========================================= -->
+
+      <label for="nextInstructions">What To Do Next</label>
 
       <textarea
         id="behaviorPrompt"
